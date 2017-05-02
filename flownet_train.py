@@ -7,7 +7,7 @@ import argparse
 import time
 import os
 from os.path import dirname
-
+import re
 import psutil
 import numpy as np
 import tensorflow as tf
@@ -109,7 +109,7 @@ def run_training(last_ckpt, start_step):
 		calc_flows = flownet.inference(imgs_0_pl, imgs_1_pl, img_shape)
 
 		# Image / Flow Summary
-		#image_summary(rotI_0_pl, rotI_1_pl, "E_result", flow_shape, calc_flows)
+		image_summary(imgs_0_pl, imgs_1_pl, "E_result", flow_shape, calc_flows)
 
 		# Add to the Graph the Ops for loss calculation.
 		loss = flownet.loss(calc_flows, flows_pl, flow_shape)
@@ -203,15 +203,15 @@ def main(_):
 		run_training(last_ckpt, 0)
 	# get last ckpt if exist
 	else:
-		ckpt_list = sorted([f for f in os.listdir(FLAGS.log_dir) if 'model.ckpt' in f])
+		ckpt_list = sorted([int(re.search(r'\d+', f).group()) for f in os.listdir(FLAGS.log_dir) if 'model.ckpt' in f and 'index' in f])
+		print(ckpt_list)
 		if not ckpt_list:
 			print("--- Empty Log -> New Training --- ")
 			run_training(ckpt_list, 0)
 		else:
-			last_ckpt_n =  int(ckpt_list[-1].split('.')[1].split('-')[1])
-			last_ckpt = FLAGS.log_dir + '/model.ckpt-'+str(last_ckpt_n)
+			last_ckpt = FLAGS.log_dir + '/model.ckpt-'+str(ckpt_list[-1])
 			print("--- Loading Checkpoint --- ", last_ckpt)
-			run_training(last_ckpt, last_ckpt_n)
+			run_training(last_ckpt, ckpt_list[-1])
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -242,7 +242,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--steps',
 	  type=int,
-	  default=500000,
+	  default=600000,
 	  help='Iteration Steps'
 	)
 	parser.add_argument(
