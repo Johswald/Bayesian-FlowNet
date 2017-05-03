@@ -8,10 +8,13 @@ import time
 import os
 from os.path import dirname
 import re
+import cv2
 import psutil
 import numpy as np
 import tensorflow as tf
+import tensorflow.contrib.slim as slim
 from tensorflow.python.client import timeline
+from tensorflow.python.training import saver as tf_saver
 
 import flownet
 
@@ -23,26 +26,26 @@ tf.app.flags.DEFINE_float('learning_rate', 1e-4,
                            """Initial learning rate.""")
 
 def image_summary(imgs_0, imgs_1, text, shape, flows=None):
-	if FLAGS.img_summary:
+	if FLAGS.imgsummary:
 		tf.summary.image(text + "_img_0", imgs_0, 2)
 		tf.summary.image(text + "_img_1", imgs_1, 2)
 		if flows != None:
-			hsv_flows = flownet.flows_to_hsv(flows, shape)
-			tf.summary.image(text + "_flow", hsv_flows, 2)
+			flow_imgs = flownet.flows_to_img(flows, shape)
+			tf.summary.image(text + "_flow", flow_imgs, 8)
 
 def placeholder_inputs(img_shape, flow_shape):
 	"""Generate placeholder variables to represent the input tensors."""
 
-	batch_size = FLAGS.batch_size
-	images_0_placeholder = tf.placeholder(tf.float32, shape=([batch_size] + img_shape))
-	images_1_placeholder = tf.placeholder(tf.float32, shape=([batch_size] + img_shape))
-	flows_placeholder = tf.placeholder(tf.float32, shape=([batch_size] + flow_shape))
+	batchsize = FLAGS.batchsize
+	images_0_placeholder = tf.placeholder(tf.float32, shape=([batchsize] + img_shape))
+	images_1_placeholder = tf.placeholder(tf.float32, shape=([batchsize] + img_shape))
+	flows_placeholder = tf.placeholder(tf.float32, shape=([batchsize] + flow_shape))
 	return images_0_placeholder, images_1_placeholder, flows_placeholder
 
 def fill_feed_dict(data_lists, images_0_pl, images_1_pl, flows_pl):
 	"""Fills the feed_dict for training the given step."""
 
-	size = FLAGS.batch_size
+	size = FLAGS.batchsize
 	images, flows  = data_lists.next_batch(size)
 	feed_dict = {
 	  images_0_pl: images[0],
@@ -51,7 +54,7 @@ def fill_feed_dict(data_lists, images_0_pl, images_1_pl, flows_pl):
 	}
   	return feed_dict
 
-def run_training(last_ckpt, start_step):
+def main(_):
 	"""Train FlowNet for a number of steps."""
 
 	# Get the lists of two images and the .flo file with a batch reader
@@ -70,10 +73,12 @@ def run_training(last_ckpt, start_step):
 		print("--- Create Placeholders ---")
 
 		# Generate placeholders for the images and labels.
-		imgs_0_pl, imgs_1_pl, flows_pl = placeholder_inputs(img_shape, flow_shape)
-
+		images, flows_pl  = train_set.next_batch(8)
+		flows_pl = tf.stack([tf.convert_to_tensor(flows_pl[i]) for i in range(8)])
+		imgs_0_pl = tf.stack([tf.convert_to_tensor(images[0][i]) for i in range(8)])
+		imgs_1_pl = tf.stack([tf.convert_to_tensor(images[1][i]) for i in range(8)])
 		# Image / Flow Summary
-		#image_summary(imgs_0_pl, imgs_1_pl, "A_", flow_shape, flows_pl)
+		#image_summary(imgs_0_pl, imgs_1_pl, "A", flow_shape, flows_pl)
 
 		print("--- Create chromatic Augmentation ---")
 		# chromatic tranformation in images
@@ -89,10 +94,6 @@ def run_training(last_ckpt, start_step):
 
 		# Image / Flow Summary
 		#image_summary(augI_0_pl, augI_1_pl, "C_affine", flow_shape, augF_pl)
-		
-		#augI_0_pl_2, augI_1_pl_2, augF_pl_2 = flownet.affine_trafo_2(chroI_0, chroI_1, flows_pl, flow_shape) 
-		# Image / Flow Summary
-		#image_summary(augI_0_pl_2, augI_1_pl_2, "C_affine2", flow_shape, augF_pl_2)
 
 		print("--- Create Image Rotation / Scaling ---")
 		#rotation / scaling (Cropping) 
@@ -102,14 +103,14 @@ def run_training(last_ckpt, start_step):
 		#image_summary(rotI_0_pl, rotI_1_pl, "D_rotation", flow_shape, rotF_pl)
 
 		# initialize glabal step
-		global_step = tf.Variable(start_step, name='global_step', trainable=False)
+		global_step = tf.Variable(0, name='global_step', trainable=False)
 
 		print("--- Load Inference Model and add loss & train ops ---")
 		# Build a Graph that computes predictions from the inference model.
 		calc_flows = flownet.inference(imgs_0_pl, imgs_1_pl, img_shape)
 
 		# Image / Flow Summary
-		image_summary(imgs_0_pl, imgs_1_pl, "E_result", flow_shape, calc_flows)
+		#image_summary(rotI_0_pl, rotI_1_pl, "E_result", flow_shape, calc_flows)
 
 		# Add to the Graph the Ops for loss calculation.
 		loss = flownet.loss(calc_flows, flows_pl, flow_shape)
@@ -118,23 +119,21 @@ def run_training(last_ckpt, start_step):
 		train_op = flownet.training(loss, global_step, FLAGS.learning_rate)
 
 		# Create a saver for writing training checkpoints.
-		saver = tf.train.Saver(write_version=tf.train.SaverDef.V2)
+		saver = tf_saver.Saver(max_to_keep=5,
+						keep_checkpoint_every_n_hours=1)
 
 		# Create a session for running Ops on the Graph.
 		#config=tf.ConfigProto(log_device_placement=True)
 		sess = tf.Session()
 
 		# restore model or initialize new
-		if last_ckpt:
-			tf.train.Saver().restore(sess, last_ckpt)
-		else:
-			# Add the variable initializer Op.
-			init = tf.global_variables_initializer()#
-			# Run the Op to initialize the variables.
-			sess.run(init)
+		# Add the variable initializer Op.
+		#init = tf.global_variables_initializer()#
+		# Run the Op to initialize the variables.
+		#sess.run(init)
 
 		# Instantiate a SummaryWriter to output summaries and the Graph.
-		summary_writer = tf.summary.FileWriter(FLAGS.log_dir, sess.graph)
+		summary_writer = tf.summary.FileWriter(FLAGS.logdir, sess.graph)
 		summary = tf.summary.merge_all()
 		# Run options		
 		run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -143,9 +142,28 @@ def run_training(last_ckpt, start_step):
 		# Start the training loop.
 		print("--- Start the training loop ---")
 		#start time
+		config = tf.ConfigProto()
+		#config.gpu_options.allow_growth = True
+		# config.log_device_placement = True
+
+		slim.learning.train(
+			train_op,
+			logdir=FLAGS.logdir + '/train',
+			save_summaries_secs=150,
+			save_interval_secs=300,
+			master="",
+			is_chief=(0 == 0),
+			startup_delay_steps=(0 * 20),
+			log_every_n_steps=100,
+			session_config=config,
+			trace_every_n_steps=1000,
+			saver=saver,
+			number_of_steps=FLAGS.max_steps,
+		)
+
 		start = time.time()
 		start_incl_eval = time.time()
-		for step in range(start_step, FLAGS.steps):
+		for step in range(start_step, FLAGS.max_steps):
 			"""Since, 
 			in a sense, every pixel is a training sample, we use fairly small minibatches of 8 image pairs. 
 			We start with learning rate lambda = 1e-4 and then divide it by 2 every 100k iterations 
@@ -164,11 +182,11 @@ def run_training(last_ckpt, start_step):
 			                       feed_dict=feed_dict, options=run_options, run_metadata=run_metadata)
 			
 			#Write the summaries and print an overview fairly often.
-			if step % 100 == 0:
+			if step % 1  == 0:
 				# Print status to stdout.
 				batch_duration = time.time() - start
 				print('Step %d / %d: Training loss = %.2f (%.3f sec)' % 
-					(step, FLAGS.steps, loss_value, batch_duration))
+					(step, FLAGS.max_steps, loss_value, batch_duration))
 				# Update the events file.
 				# Build the summary Tensor based on the TF collection of Summaries.
 				summary_str = sess.run(summary, feed_dict=feed_dict)
@@ -178,69 +196,48 @@ def run_training(last_ckpt, start_step):
 				start = time.time()
 
 			# Save a checkpoint and evaluate the model periodically.
-			if step % 1000 == 0 or (step + 1) == FLAGS.steps:
+			if step % 1000 == 0 or (step + 1) == FLAGS.max_steps:
 				checkpoint_file = os.path.join(FLAGS.log_dir, 'model.ckpt')
 				saver.save(sess, checkpoint_file, global_step=step)
 				batch_duration = time.time() - start_incl_eval
-				m, s = divmod((batch_duration)*(FLAGS.steps-step)/1000, 60)
+				m, s = divmod((batch_duration)*(FLAGS.max_steps-step)/1000, 60)
 				h, m = divmod(m, 60)
 				print("Estimated termination in: %d:%02d:%02d" % (h, m, s))
 				start_incl_eval = time.time()
 				# print timeline for performance analysis
 				tl = timeline.Timeline(run_metadata.step_stats)
 				ctf = tl.generate_chrome_trace_format()
-				with open('tiptop_clean/timeline/'+ str(step) +'-timeline.json', 'w') as f:
+				with open('timeline/'+ str(step) +'-timeline.json', 'w') as f:
 					f.write(ctf)
-
-def main(_):
-	# check where to start training / if checkpoints exists
-	if not FLAGS.restore:
-		print("--- Flag Retore True -> New Training --- ")
-		if tf.gfile.Exists(FLAGS.log_dir):
-			tf.gfile.DeleteRecursively(FLAGS.log_dir)
-		tf.gfile.MakeDirs(FLAGS.log_dir)
-		last_ckpt = None
-		run_training(last_ckpt, 0)
-	# get last ckpt if exist
-	else:
-		ckpt_list = sorted([int(re.search(r'\d+', f).group()) for f in os.listdir(FLAGS.log_dir) if 'model.ckpt' in f and 'index' in f])
-		print(ckpt_list)
-		if not ckpt_list:
-			print("--- Empty Log -> New Training --- ")
-			run_training(ckpt_list, 0)
-		else:
-			last_ckpt = FLAGS.log_dir + '/model.ckpt-'+str(ckpt_list[-1])
-			print("--- Loading Checkpoint --- ", last_ckpt)
-			run_training(last_ckpt, ckpt_list[-1])
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument(
-	  '--data_dir',
+	  '--datadir',
 	  type=str,
 	  default='data/FlyingChairs_release/data/',
 	  help='Directory to put the input data.'
 	)
 	parser.add_argument(
-	  '--split_list',
+	  '--splitlist',
 	  type=str,
 	  default='data/FlyingChairs_release_test_train_split.list',
 	  help='List where to split train / test'
 	)
 	parser.add_argument(
-	  '--log_dir',
+	  '--logdir',
 	  type=str,
 	  default='tiptop_clean/log',
 	  help='Directory where to write event logs and checkpoints'
 	)
 	parser.add_argument(
-	  '--batch_size',
+	  '--batchsize',
 	  type=int,
 	  default=8,
 	  help='Batch Size'
 	)
 	parser.add_argument(
-	  '--steps',
+	  '--max_steps',
 	  type=int,
 	  default=600000,
 	  help='Iteration Steps'
@@ -252,16 +249,16 @@ if __name__ == '__main__':
 	  help='Restore from log'
 	)
 	parser.add_argument(
-	  '--img_summary',
+	  '--imgsummary',
 	  type=bool,
 	  default=False,
 	  help='Make image summary'
 	)
-	FLAGS.data_dir = os.path.join(dir_path,  parser.parse_args().data_dir)
-	FLAGS.log_dir = os.path.join(dir_path, parser.parse_args().log_dir)
-	FLAGS.batch_size = parser.parse_args().batch_size
-	FLAGS.steps = parser.parse_args().steps
+	FLAGS.datadir = os.path.join(dir_path,  parser.parse_args().datadir)
+	FLAGS.logdir = os.path.join(dir_path, parser.parse_args().logdir)
+	FLAGS.batchsize = parser.parse_args().batchsize
+	FLAGS.max_steps = parser.parse_args().max_steps
 	FLAGS.restore = parser.parse_args().restore
-	FLAGS.img_summary = parser.parse_args().img_summary
-	FLAGS.split_list = os.path.join(dir_path,  parser.parse_args().split_list)
+	FLAGS.imgsummary = parser.parse_args().imgsummary
+	FLAGS.splitlist = os.path.join(dir_path,  parser.parse_args().splitlist)
 	tf.app.run()

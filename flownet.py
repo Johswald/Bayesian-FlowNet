@@ -6,12 +6,12 @@ import os
 import sys
 import cv2
 
-import psutil
 import numpy as np
 import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
+import computeColor
 import flownet_input
 
 FLAGS = tf.app.flags.FLAGS
@@ -56,7 +56,7 @@ def inference(images_0, images_1, img_shape):
 
 def _affine_transform(imgs_0, imgs_1, flows, shape):
   """Affine Transformation with OpenCV help (warpAffine)"""
-  bs = FLAGS.batch_size
+  bs = FLAGS.batchsize
   h, w = shape[:2]
   c = np.float32([w, h]) / 2.0
   mat = np.random.normal(size=[bs, 2, 3])
@@ -89,43 +89,10 @@ def affine_trafo(data, img_shape, flow_shape):
   augI_0 =  aug_data[0]
   augI_1 = aug_data[1]
   augF =  aug_data[2]
-  augI_0.set_shape([FLAGS.batch_size] + list(img_shape))
-  augI_1.set_shape([FLAGS.batch_size] + list(img_shape))
-  augF.set_shape([FLAGS.batch_size] + list(flow_shape))
+  augI_0.set_shape([FLAGS.batchsize] + list(img_shape))
+  augI_1.set_shape([FLAGS.batchsize] + list(img_shape))
+  augF.set_shape([FLAGS.batchsize] + list(flow_shape))
   return augI_0, augI_1, augF
-
-def affine_trafo_2(imgs_0, imgs_1, flows, shape):
-  """
-  bs = FLAGS.batch_size
-  h, w = shape[:2]
-  c = np.float32([w, h]) / 2.0
-  mat = np.random.normal(size=[bs, 2, 3])
-  mat[:, :2, :2] = mat[:, :2, :2] * 0.2 + np.eye(2)
-  mat[:, :, 2] = mat[:, :, 2] * 0.8 + c - mat[:, :2, :2].dot(c)"""
-  #print(FLAGS.mat)
-  bs = FLAGS.batch_size
-  h, w = shape[:2]
-  c = np.float32([w, h]) / 2.0
-  mat = np.random.normal(size=[bs, 2, 3])
-  mat[:, :2, :2] = mat[:, :2, :2] * 0.2 + np.eye(2)
-  mat[:, :, 2] = mat[:, :, 2] * 0.8 + c - mat[:, :2, :2].dot(c)
-
-  flip_x = [np.random.choice([1, -1]).tolist() for i in range(bs)]
-  flip_y = [np.random.choice([1, -1]).tolist() for i in range(bs)]
-  mat[:, 0, 0] = 0
-  mat[:, 1, 1] = 0
-  mat[:, 0, 2] = 10
-  mat[:, 1, 2] = 10
-  mat[:, 1, 0] = 0
-  mat[:, 0, 1] = 0
-
-  reshape = [np.append(np.reshape(ma,[6]), [0,0]).tolist() for ma in mat]
-  print(reshape)
-  imgs_0 = tf.contrib.image.transform(imgs_0, reshape)
-  imgs_1 = tf.contrib.image.transform(imgs_1, reshape)
-  flows = tf.contrib.image.transform(flows, reshape)
-
-  return imgs_0, imgs_1, flows
 
 def chromatic_augm(imgs_0, imgs_1):
   """TODO: Check chromatic data augm examples in the web"""
@@ -138,7 +105,7 @@ def chromatic_augm(imgs_0, imgs_1):
   - gamma values from [0.7, 1.5] and 
   - additive brightness changes using Gaussian with a sigma of 0.2.
   """
-  bs = FLAGS.batch_size
+  bs = FLAGS.batchsize
 
   # multiplicative color changes to the RGB channels per image from [0.5, 2]; 
   # 1. Own testet replacement with saturation / hue
@@ -171,7 +138,7 @@ def rotation(imgs_0, imgs_1, flows, shape):
   - rotation from [ -17 , 17 ]; 
   - scaling from [0.9, 2.0]. 
   """
-  bs = FLAGS.batch_size
+  bs = FLAGS.batchsize
   h, w = shape[:2]
 
   #- rotation from [ -17 , 17 ]; 
@@ -232,39 +199,26 @@ def rotation(imgs_0, imgs_1, flows, shape):
   imgs_1 = tf.image.crop_and_resize(imgs_1, boxes, box_ind, crop_size)
   flows = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
 
-  #tf.summary.image("crop_and_resize" , imgs_0, 8)
-
-  #imgs0_test = tf.stack([tf.image.resize_images(tf.image.central_crop(img, scales[i]), shape[:2]) 
-  #                      for img, i in zip(tf.unstack(imgs_0), range(bs))])
-
-  #tf.summary.image("Rotation_crop" , imgs_0, 2)
   return imgs_0, imgs_1, flows
 
-def _hsv_transform(flows, shape):
+def _flow_transform(flows, shape):
   """Transorm Cartesian Flow to HSV flow for visualisation"""
   """TODO: this is not correct, copy official matlab version"""
-  hsv_flows = []
+  flow_imgs = []
   h = shape[0]
   w = shape[1]
   for flow in flows:
-    a = flow[: , : , 0]
-    b = flow[: , : , 1]
-    mag, ang = cv2.cartToPolar(a, b)
-    #http://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_video/py_lucas_kanade/py_lucas_kanade.html
-    hsv = np.zeros((int(h), int(w), 3), np.uint8)
-    hsv[:, :, 0] = ang * 180 / np.pi / 2
-    hsv[:, :, 1] = 255
-    hsv[:, :, 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-    hsv = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    hsv_flows.append(hsv)
-  return [hsv_flows]
+    img = computeColor.computeImg(flow)
+    #cv2.imwrite(str(np.random.randint(5000))+'.png', img)
+    flow_imgs.append(img)
+  return [flow_imgs]
 
-def flows_to_hsv(flows, flow_shape):
+def flows_to_img(flows, flow_shape):
   """ Pyfunc wrapper for flow to hsv trafo """
-  hsv_flows = tf.py_func( _hsv_transform, [flows, flow_shape], 
-                         [tf.uint8], name='hsv_transform')[0]
-  hsv_flows.set_shape([FLAGS.batch_size] + list(flow_shape))
-  return hsv_flows
+  flow_imgs = tf.py_func( _flow_transform, [flows, flow_shape], 
+                         [tf.uint8], name='flow_transform')[0]
+  flow_imgs.set_shape([FLAGS.batchsize] + list(flow_shape))
+  return flow_imgs
 
 def loss(calc_flows, flows, flow_shape):
   """
@@ -273,7 +227,7 @@ def loss(calc_flows, flows, flow_shape):
   loss on chairs set: 2.71"""
   # Is this correct? Could be absolute value?
   abs_loss = tf.reduce_sum(tf.abs(tf.subtract(calc_flows,flows)))
-  return abs_loss/(FLAGS.batch_size*flow_shape[0]*flow_shape[1])
+  return abs_loss/(FLAGS.batchsize*flow_shape[0]*flow_shape[1])
 
 def training(loss, global_step, learning_rate):
 
@@ -296,6 +250,6 @@ def read_data_lists():
   """Construct data lists with batch reader function.
   ....
   """
-  return flownet_input.read_data_lists(FLAGS.data_dir, FLAGS.split_list)
+  return flownet_input.read_data_lists(FLAGS.datadir, FLAGS.splitlist)
 
 

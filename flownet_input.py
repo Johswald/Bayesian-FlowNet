@@ -7,6 +7,8 @@ import glob
 import cv2
 
 import numpy as np
+import readFlowFile
+
 import tensorflow as tf
 from tensorflow.python.framework import dtypes
 
@@ -107,9 +109,7 @@ def load_images(img_files_0_LIST, img_files_1_LIST):
     img_0 = cv2.imread(image_0)
     img_1 = cv2.imread(image_1)
     img_0 = cv2.cvtColor(img_0, cv2.COLOR_BGR2RGB)
-    img_1 = cv2.cvtColor(img_1, cv2.COLOR_BGR2RGB)
-    #img_0 = cv2.convertScaleAbs(img_0)
-    #img_1 = cv2.convertScaleAbs(img_1)
+    img_1 = cv2.cvtColor(img_1, cv2.COLOR_BGR2RGB) 
     images_0.append(img_0/255.0)
     images_1.append(img_1/255.0)
 
@@ -120,18 +120,7 @@ def load_flows(flo_files_LIST):
   """
   flows = []
   for flow in flo_files_LIST:
-    with open(flow, 'rb') as f:
-      magic = np.fromfile(f, np.float32, count=1)
-      if 202021.25 != magic:
-        print 'Magic number incorrect. Invalid .flo file'
-        exit()
-      else:
-        w = np.fromfile(f, np.int32, count=1)
-        h = np.fromfile(f, np.int32, count=1)
-        data = np.fromfile(f, np.float32, count=2*w*h)
-    # Reshape data into 3D array (columns, rows, bands)
-        data2D = np.resize(data, (int(h), int(w), 2))
-        flows.append(data2D)
+    flows.append(readFlowFile.read(flow))
   return flows
 
 def read_data_lists(data_dir, split_list):
