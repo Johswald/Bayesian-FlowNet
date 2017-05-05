@@ -43,7 +43,7 @@ flags.DEFINE_float('decay_factor', 0.33,
 flags.DEFINE_float('decay_steps', 100000,
                    'Learning rate decay interval in steps.')
 
-flags.DEFINE_integer('img_summary_num', 8,
+flags.DEFINE_integer('img_summary_num', 2,
                            'Number of images in summary')
 
 flags.DEFINE_integer('max_checkpoints', 5,
@@ -95,7 +95,6 @@ def main(_):
 		# Generate tensors from numpy images and flows.
 		imgs_0, imgs_1, flows = convert_to_tensor(imgs_np, flows_np)
 
-		# Image / Flow Summary
 		flownet.image_summary(imgs_0, imgs_1, "A", flows)
 
 		# chromatic tranformation in imagess
@@ -108,26 +107,19 @@ def main(_):
 		#rotation / scaling (Cropping) 
 		rotI_0, rotI_1, rotF = flownet.rotation(augI_0, augI_1, augF) 
 
-		# Build a Graph that computes predictions from the inference model.
 		calc_flows = flownet.inference(rotI_0, rotI_1)
 
 		# Image / Flow Summary
 		flownet.image_summary(rotI_0, rotI_1, "E_result", calc_flows)
 
-		# loss
 		train_loss = flownet.train_loss(calc_flows, rotF)
 
 		global_step = slim.get_or_create_global_step()
 
-		# Add to the Graph the Ops that calculate and apply gradients.
 		train_op = flownet.create_train_op(train_loss, global_step)
 
-		# Create a saver for writing training checkpoints.
 		saver = tf_saver.Saver(max_to_keep=FLAGS.max_checkpoints,
 						keep_checkpoint_every_n_hours=FLAGS.keep_checkpoint_every_n_hours)
-
-		# Start the training loop.
-		print("--- Start the training loop ---")
 
 		slim.learning.train(
 			train_op,

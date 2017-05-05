@@ -128,8 +128,6 @@ def read_data_lists(data_dir, split_list):
     'lengths of images / flows are not the same: %s, %s, and %s' %
     (len(train_images_0), len(train_images_1), len(train_flows)))
 
-  print(" --- Sample Size: " + str(len(train_images_0)))
-  print(len(train_images_0))
   if len(train_images_0) == 22872:
     split_text = open(split_list, 'rb')
     split_list = []
