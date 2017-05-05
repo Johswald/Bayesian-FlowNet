@@ -37,6 +37,7 @@ def inference(images_0, images_1):
     for key in sorted(convs): 
       net = slim.conv2d(net, convs[key][0], convs[key][1], convs[key][2], scope=key)
     # deconv + flow
+
     for i in range(4):
       # flow predict + flow deconv
       flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_' + str(6-i))
@@ -224,6 +225,16 @@ def image_summary(imgs_0, imgs_1, text, flows=None):
     if flows != None:
       flow_imgs = flows_to_img(flows)
       tf.summary.image(text + "_flow", flow_imgs, 2)
+
+def convert_to_tensor(imgs_np, flows_np):
+  """convert numpy to tensor"""
+  flows = tf.stack([tf.convert_to_tensor(flows_np[i], dtype = tf.float32) 
+              for i in range(FLAGS.batchsize)])
+  imgs_0 = tf.stack([tf.convert_to_tensor(imgs_np[0][i], dtype = tf.float32) 
+              for i in range(FLAGS.batchsize)])
+  imgs_1 = tf.stack([tf.convert_to_tensor(imgs_np[1][i], dtype = tf.float32) 
+              for i in range(FLAGS.batchsize)])
+  return imgs_0, imgs_1, flows
 
 def train_loss(calc_flows, flows):
   """

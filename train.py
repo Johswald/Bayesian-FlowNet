@@ -25,6 +25,8 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('splitlist', 'data/FlyingChairs_release_test_train_split.list',
                            'List where to split train / test')
 
+flags.DEFINE_integer('batchsize', 8, 'Batch size.')
+
 flags.DEFINE_integer('img_shape', [384, 512, 3],
                            'Image shape: width, height, channels')
 
@@ -67,33 +69,20 @@ flags.DEFINE_integer('trace_every_n_steps', 1000,
 flags.DEFINE_integer('max_steps', 500000, 
 					'Number of training steps.')
 
-flags.DEFINE_integer('batchsize', 8, 'Batch size.')
-
-def convert_to_tensor(imgs_np, flows_np):
-	"""convert numpy to tensor"""
-	flows = tf.stack([tf.convert_to_tensor(flows_np[i], dtype = tf.float32) 
-  						for i in range(FLAGS.batchsize)])
-	imgs_0 = tf.stack([tf.convert_to_tensor(imgs_np[0][i], dtype = tf.float32) 
-  						for i in range(FLAGS.batchsize)])
-	imgs_1 = tf.stack([tf.convert_to_tensor(imgs_np[1][i], dtype = tf.float32) 
-  						for i in range(FLAGS.batchsize)])
-
-  	return imgs_0, imgs_1, flows
-
 def main(_):
 	"""Train FlowNet for a FLAGS.max_steps."""
 
 	# Get the lists of two images and the .flo file with a batch reader
 	data_lists = flownet.read_data_lists()
+
 	# we (have) split the Flying Chairs dataset into 22, 232 training and 640 test samples 
 	train_set = data_lists.train
-
 	imgs_np, flows_np  = train_set.next_batch(FLAGS.batchsize)
-	# Add the variable initializer Op.
+
 	with tf.Graph().as_default():
 
 		# Generate tensors from numpy images and flows.
-		imgs_0, imgs_1, flows = convert_to_tensor(imgs_np, flows_np)
+		imgs_0, imgs_1, flows = flownet.convert_to_tensor(imgs_np, flows_np, FLAGS.batchsize)
 
 		flownet.image_summary(imgs_0, imgs_1, "A", flows)
 
@@ -121,6 +110,8 @@ def main(_):
 		saver = tf_saver.Saver(max_to_keep=FLAGS.max_checkpoints,
 						keep_checkpoint_every_n_hours=FLAGS.keep_checkpoint_every_n_hours)
 
+		config = tf.ConfigProto()
+		config.gpu_options.allow_growth=True
 		slim.learning.train(
 			train_op,
 			logdir=FLAGS.logdir + '/train',
@@ -129,6 +120,7 @@ def main(_):
 			summary_op=tf.summary.merge_all(),
 			log_every_n_steps=FLAGS.log_every_n_steps,
 			trace_every_n_steps=FLAGS.trace_every_n_steps,
+			session_config=config,
 			saver=saver,
 			number_of_steps=FLAGS.max_steps,
 		)
