@@ -9,7 +9,7 @@ import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
 
 import computeColor
-import flownet_input
+import flownet_tools
 
 FLAGS = flags.FLAGS
 
@@ -90,7 +90,6 @@ def affine_trafo(data):
 def chromatic_augm(imgs_0, imgs_1):
   """TODO: Check chromatic data augm examples in the web"""
   """chromatic augmentation. (brightness, contrast, gamma, and color)
-
   (- The Gaussian noise has a sigma uniformly sampled 
    from [0, 0.04]; Gaussian Blur in Affine Trafo)
   - contrast is sampled within [-0.8, 0.4]; 
@@ -265,6 +264,4 @@ def read_data_lists():
   """Construct data lists with batch reader function.
   ....
   """
-  return flownet_input.read_data_lists(FLAGS.datadir, FLAGS.splitlist)
-
-
+  return flownet_tools.read_data_lists(FLAGS.datadir, FLAGS.splitlist)

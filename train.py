@@ -43,7 +43,7 @@ flags.DEFINE_float('decay_factor', 0.33,
 flags.DEFINE_float('decay_steps', 100000,
                    'Learning rate decay interval in steps.')
 
-flags.DEFINE_integer('img_summary_num', 2,
+flags.DEFINE_integer('img_summary_num', 8,
                            'Number of images in summary')
 
 flags.DEFINE_integer('max_checkpoints', 5,
@@ -84,8 +84,6 @@ def main(_):
 	"""Train FlowNet for a FLAGS.max_steps."""
 
 	# Get the lists of two images and the .flo file with a batch reader
-	print("--- Start FlowNet Training ---")
-	print("--- Create data list for input batch reading ---")
 	data_lists = flownet.read_data_lists()
 	# we (have) split the Flying Chairs dataset into 22, 232 training and 640 test samples 
 	train_set = data_lists.train
@@ -118,6 +116,7 @@ def main(_):
 
 		# loss
 		train_loss = flownet.train_loss(calc_flows, rotF)
+
 		global_step = slim.get_or_create_global_step()
 
 		# Add to the Graph the Ops that calculate and apply gradients.
