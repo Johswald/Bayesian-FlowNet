@@ -232,10 +232,9 @@ def train_loss(calc_flows, flows):
   loss on chairs set: 2.71"""
 
   h, w = FLAGS.img_shape[:2]
-
-  scale = 1/FLAGS.batchsize*h*w
-  abs_loss = slim.losses.absolute_difference(calc_flows,flows)
-  return abs_loss * scale
+  abs_loss = slim.losses.absolute_difference(calc_flows, flows)
+  # scale
+  return abs_loss / FLAGS.batchsize*h*w*2
 
 def create_train_op(train_loss, global_step):
   """Sets up the training Ops."""
@@ -253,7 +252,7 @@ def create_train_op(train_loss, global_step):
                     FLAGS.minimum_learning_rate)
 
   tf.summary.scalar('Learning_Rate', learning_rate)
-  tf.summary.scalar('Training_Loss', train_loss)
+  tf.summary.scalar('Training_Loss_2', train_loss)
 
   trainer = tf.train.AdamOptimizer(learning_rate= learning_rate, beta1=0.9, 
                                     beta2=0.999, epsilon=1e-08, use_locking=False, name='Adam')
