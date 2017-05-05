@@ -1,36 +1,33 @@
 # FlowNet in Tensorflow
 # ==============================================================================
 
-import gzip
-import os
-import sys
 import cv2
-
 import numpy as np
 import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from tensorflow.python.platform import flags
 
 import computeColor
 import flownet_input
 
-FLAGS = tf.app.flags.FLAGS
+FLAGS = flags.FLAGS
 
-def inference(images_0, images_1, img_shape):
+def inference(images_0, images_1):
   """Build the flownet model up to where it may be used for inference.
   """
-  net = tf.concat([images_0, images_1], img_shape[-1],  name='concat_0')
+  net = tf.concat([images_0, images_1], FLAGS.img_shape[-1],  name='concat_0')
   # stack of convolutions
   convs = {"conv1" : [64, [7,7], 2],
-          "conv2_1" : [128, [5,5], 2], 
-          "conv3" : [256, [5,5], 2], 
-          "conv3_1" : [256, [3,3], 1], 
-          "conv4" : [512, [3,3], 2], 
-          "conv4_1" : [512, [3,3], 1], 
-          "conv5" : [512, [3,3], 2], 
-          "conv5_1" : [512, [3,3], 1],
-          "conv6" : [1024, [3,3], 2], 
-          "conv6_1" : [1024, [3,3], 1], 
+           "conv2_1" : [128, [5,5], 2], # _1 to concat easily later
+           "conv3" : [256, [5,5], 2], 
+           "conv3_1" : [256, [3,3], 1], 
+           "conv4" : [512, [3,3], 2], 
+           "conv4_1" : [512, [3,3], 1], 
+           "conv5" : [512, [3,3], 2], 
+           "conv5_1" : [512, [3,3], 1],
+           "conv6" : [1024, [3,3], 2], 
+           "conv6_1" : [1024, [3,3], 1], 
       }
 
   with slim.arg_scope([slim.conv2d], padding='SAME',
@@ -48,26 +45,22 @@ def inference(images_0, images_1, img_shape):
       deconv = slim.conv2d_transpose(net, 512/2**i , [4, 4], 2, scope='deconv_'+ str(5-i))
       # get old convolution
       to_concat = tf.get_default_graph().get_tensor_by_name('conv'+str(5-i)+'_1/Relu:0')
-      net = tf.concat([deconv, to_concat, flow_up], img_shape[-1], name='concat_' + str(i+1))
+      net = tf.concat([deconv, to_concat, flow_up], FLAGS.img_shape[-1], name='concat_' + str(i+1))
     flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_pred')
-  # bilinear upsample? (TODO)
-  flow_up = tf.image.resize_images(flow_predict, img_shape[:2])
+  # resize  with ResizeMethod.BILINEAR as default
+  flow_up = tf.image.resize_images(flow_predict, FLAGS.img_shape[:2])
   return flow_up
 
-def _affine_transform(imgs_0, imgs_1, flows, shape):
+def _affine_transform(imgs_0, imgs_1, flows):
   """Affine Transformation with OpenCV help (warpAffine)"""
   bs = FLAGS.batchsize
-  h, w = shape[:2]
+  h, w, ch = FLAGS.img_shape
   c = np.float32([w, h]) / 2.0
   mat = np.random.normal(size=[bs, 2, 3])
   mat[:, :2, :2] = mat[:, :2, :2] * 0.2 + np.eye(2)
   mat[:, :, 2] = mat[:, :, 2] * 0.8 + c - mat[:, :2, :2].dot(c)
 
-  for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)):
-    """
-    if np.amax(img_0) > 1 or np.amax(img_1) > 1 or np.amin(img_0) < 0 or np.amin(img_0) < 0:
-      print(np.amin(img_0), np.amin(img_1), np.amax(img_0), np.amax(img_1))
-      exit()"""
+  for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)): 
     aug_0 = cv2.warpAffine(img_0, mat_i, (w, h), borderMode=3)
     aug_1 = cv2.warpAffine(img_1, mat_i, (w, h), borderMode=3)
     aug_f = cv2.warpAffine(flow, mat_i, (w, h), borderMode=3)
@@ -78,20 +71,20 @@ def _affine_transform(imgs_0, imgs_1, flows, shape):
     imgs_0[i] = aug_0
     imgs_1[i] = aug_1
     flows[i] = aug_f
-  #print("IMAGE", imgs_0[0])
   return [imgs_0, imgs_1, flows]
 
-def affine_trafo(data, img_shape, flow_shape):
+def affine_trafo(data):
   """affine transformation """
-  aug_data = tf.py_func( _affine_transform, [data[0], data[1], data[2], img_shape], 
+  shape = FLAGS.img_shape
+  aug_data = tf.py_func( _affine_transform, [data[0], data[1], data[2]], 
               [tf.float32, tf.float32, tf.float32], name='affine_transform')
-  # does a more elegant way exist?
-  augI_0 =  aug_data[0]
-  augI_1 = aug_data[1]
-  augF =  aug_data[2]
-  augI_0.set_shape([FLAGS.batchsize] + list(img_shape))
-  augI_1.set_shape([FLAGS.batchsize] + list(img_shape))
-  augF.set_shape([FLAGS.batchsize] + list(flow_shape))
+  augI_0, augI_1, augF = aug_data[:]
+  augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
+  augI_1.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
+  augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
+  
+  # Image / Flow Summary
+  image_summary(augI_0, augI_1, "C_affine", augF)
   return augI_0, augI_1, augF
 
 def chromatic_augm(imgs_0, imgs_1):
@@ -106,31 +99,32 @@ def chromatic_augm(imgs_0, imgs_1):
   - additive brightness changes using Gaussian with a sigma of 0.2.
   """
   bs = FLAGS.batchsize
-
   # multiplicative color changes to the RGB channels per image from [0.5, 2]; 
   # 1. Own testet replacement with saturation / hue
   # 2. gamma values from [0.7, 1.5] and 
   # 3. Own testet brightness changes
   # different transformation in batch
-
   hue = np.random.uniform(-1, 1, bs)
   gamma = np.random.uniform(0.7, 1.5, bs)
   delta = np.random.uniform(-1 , 1, bs)
-  imgs_0 = tf.stack([tf.image.adjust_brightness(
+  chroI_0 = tf.stack([tf.image.adjust_brightness(
                         tf.image.adjust_gamma(
                           tf.image.adjust_hue(
                             img, hue[i]), gamma[i]), delta[i])
                               for img, i in zip(tf.unstack(imgs_0), range(bs))])
 
-  imgs_1 = tf.stack([tf.image.adjust_brightness(
+  chroI_1 = tf.stack([tf.image.adjust_brightness(
                         tf.image.adjust_gamma(
                           tf.image.adjust_hue(
                             img, hue[i]), gamma[i]), delta[i])
                               for img, i in zip(tf.unstack(imgs_1), range(bs))])
 
-  return imgs_0, imgs_1
+  # Image / Flow Summary
+  image_summary(chroI_0, chroI_1, "B_chrom")
 
-def rotation(imgs_0, imgs_1, flows, shape):
+  return chroI_0, chroI_1
+
+def rotation(imgs_0, imgs_1, flows):
   """image rotation/scaling. 
   Specifically we sample 
   - translation from a the range [ 20%, 20%] 
@@ -139,7 +133,7 @@ def rotation(imgs_0, imgs_1, flows, shape):
   - scaling from [0.9, 2.0]. 
   """
   bs = FLAGS.batchsize
-  h, w = shape[:2]
+  h, w = FLAGS.img_shape[:2]
 
   #- rotation from [ -17 , 17 ]; 
   angles = np.random.uniform(-0.17, 0.17, bs)
@@ -195,55 +189,76 @@ def rotation(imgs_0, imgs_1, flows, shape):
 
   crop_size = [h, w]
   box_ind = [i for i in range(8)]
-  imgs_0 = tf.image.crop_and_resize(imgs_0, boxes, box_ind, crop_size)
-  imgs_1 = tf.image.crop_and_resize(imgs_1, boxes, box_ind, crop_size)
-  flows = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
+  rotI_0 = tf.image.crop_and_resize(imgs_0, boxes, box_ind, crop_size)
+  rotI_1 = tf.image.crop_and_resize(imgs_1, boxes, box_ind, crop_size)
+  rotF = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
 
-  return imgs_0, imgs_1, flows
+  # Image / Flow Summary
+  image_summary(rotI_0, rotI_1, "D_rotation", rotF)
+  return rotI_0, rotI_1, rotF
 
-def _flow_transform(flows, shape):
-  """Transorm Cartesian Flow to HSV flow for visualisation"""
-  """TODO: this is not correct, copy official matlab version"""
+def _flow_transform(flows):
+  """ Transorm Cartesian Flow to rgb flow image for visualisation """
+
   flow_imgs = []
-  h = shape[0]
-  w = shape[1]
+  h, w = FLAGS.flow_shape[:2]
   for flow in flows:
     img = computeColor.computeImg(flow)
-    #cv2.imwrite(str(np.random.randint(5000))+'.png', img)
     flow_imgs.append(img)
   return [flow_imgs]
 
-def flows_to_img(flows, flow_shape):
-  """ Pyfunc wrapper for flow to hsv trafo """
-  flow_imgs = tf.py_func( _flow_transform, [flows, flow_shape], 
+def flows_to_img(flows):
+  """ Pyfunc wrapper for flow to rgb trafo """
+
+  flow_imgs = tf.py_func( _flow_transform, [flows], 
                          [tf.uint8], name='flow_transform')[0]
-  flow_imgs.set_shape([FLAGS.batchsize] + list(flow_shape))
+
+  flow_imgs.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
   return flow_imgs
 
-def loss(calc_flows, flows, flow_shape):
+def image_summary(imgs_0, imgs_1, text, flows=None):
+  """ Write image summary for tensorboard / data augmenation """ 
+
+  if FLAGS.imgsummary:
+    tf.summary.image(text + "_img_0", imgs_0, FLAGS.img_summary_num)
+    tf.summary.image(text + "_img_1", imgs_1, FLAGS.img_summary_num)
+    if flows != None:
+      flow_imgs = flows_to_img(flows)
+      tf.summary.image(text + "_flow", flow_imgs, 2)
+
+def train_loss(calc_flows, flows):
   """
   loss on the aee (average endpoint error)
   https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3478865/
   loss on chairs set: 2.71"""
-  # Is this correct? Could be absolute value?
-  abs_loss = tf.reduce_sum(tf.abs(tf.subtract(calc_flows,flows)))
-  return abs_loss/(FLAGS.batchsize*flow_shape[0]*flow_shape[1])
 
-def training(loss, global_step, learning_rate):
+  h, w = FLAGS.img_shape[:2]
 
+  scale = 1/FLAGS.batchsize*h*w
+  abs_loss = slim.losses.absolute_difference(calc_flows,flows)
+  return abs_loss * scale
+
+def create_train_op(train_loss, global_step):
   """Sets up the training Ops."""
-  """For training CNNs we use a modified version of the caffe [20] framework. 
-  We choose Adam [22] as optimization method because for our task it shows faster 
-  convergence than standard stochastic gradient descent with momentum. We fix the 
-  parameters of Adam as recommended in [22]: B1 = 0.9 and B2 = 0.999. 
-  """# Add a scalar summary for the snapshot loss.
-  # Create the gradient descent optimizer with the given learning rate.
-  tf.summary.scalar('Training Loss', loss)
-  optimizer = tf.train.AdamOptimizer(learning_rate= learning_rate, beta1=0.9, 
-    beta2=0.999, epsilon=1e-08, use_locking=False, name='Adam')
-  # Use the optimizer to apply the gradients that minimize the loss
-  # (and also increment the global step counter) as a single training step.
-  train_op = optimizer.minimize(loss, global_step=global_step)
+  
+  slim.model_analyzer.analyze_vars(
+        tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
+
+  learning_rate = tf.maximum(
+                    tf.train.exponential_decay(
+                        FLAGS.learning_rate,
+                        global_step,
+                        FLAGS.decay_steps,
+                        FLAGS.decay_factor,
+                        staircase=True),
+                    FLAGS.minimum_learning_rate)
+
+  tf.summary.scalar('Learning_Rate', learning_rate)
+  tf.summary.scalar('Training_Loss', train_loss)
+
+  trainer = tf.train.AdamOptimizer(learning_rate= learning_rate, beta1=0.9, 
+                                    beta2=0.999, epsilon=1e-08, use_locking=False, name='Adam')
+  train_op = slim.learning.create_train_op(train_loss, trainer)
   return train_op
 
 def read_data_lists():
