@@ -82,7 +82,7 @@ def main(_):
 	with tf.Graph().as_default():
 
 		# Generate tensors from numpy images and flows.
-		imgs_0, imgs_1, flows = flownet.convert_to_tensor(imgs_np, flows_np, FLAGS.batchsize)
+		imgs_0, imgs_1, flows = flownet.convert_to_tensor(imgs_np, flows_np)
 
 		flownet.image_summary(imgs_0, imgs_1, "A", flows)
 
