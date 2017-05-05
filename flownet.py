@@ -232,10 +232,10 @@ def train_loss(calc_flows, flows):
   loss on chairs set: 2.71"""
 
   h, w = FLAGS.img_shape[:2]
-  abs_loss = slim.losses.absolute_difference(calc_flows, flows)
+  abs_loss = tf.losses.absolute_difference(calc_flows, flows)
   tf.summary.scalar('abs_loss', abs_loss)
   # scale
-  return abs_loss / FLAGS.batchsize*h*w*2
+  return abs_loss / (FLAGS.batchsize*h*w*2)
 
 def create_train_op(train_loss, global_step):
   """Sets up the training Ops."""
