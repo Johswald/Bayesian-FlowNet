@@ -16,92 +16,93 @@ from tensorflow.python.platform import flags
 from tensorflow.python.training import saver as tf_saver
 
 import flownet
+import flownet_tools
 
 dir_path = dirname(os.path.realpath(__file__))
 
 # Basic model parameters as external flags.
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('splitlist', 'data/FlyingChairs_release_test_train_split.list',
-                           'List where to split train / test')
-
 flags.DEFINE_integer('batchsize', 8, 'Batch size.')
 
 flags.DEFINE_integer('img_shape', [384, 512, 3],
-                           'Image shape: width, height, channels')
+					'Image shape: width, height, channels')
 
 flags.DEFINE_integer('flow_shape', [384, 512, 2],
-                           'Image shape: width, height, 2')
+					'Image shape: width, height, 2')
 
 flags.DEFINE_float('learning_rate', 1e-4,
-                           'Initial learning rate')
+					'Initial learning rate')
 
 flags.DEFINE_float('minimum_learning_rate', 1e-6,
-                   'Lower bound for learning rate.')
+					'Lower bound for learning rate.')
 
 flags.DEFINE_float('decay_factor', 0.33, 
 					'Learning rate decay factor.')
 
 flags.DEFINE_float('decay_steps', 100000,
-                   'Learning rate decay interval in steps.')
+					'Learning rate decay interval in steps.')
 
 flags.DEFINE_integer('img_summary_num', 2,
-                           'Number of images in summary')
+					'Number of images in summary')
 
 flags.DEFINE_integer('max_checkpoints', 5,
-                     'Maximum number of recent checkpoints to keep.')
+					'Maximum number of recent checkpoints to keep.')
 
 flags.DEFINE_float('keep_checkpoint_every_n_hours', 5.0,
-                   'How often checkpoints should be kept.')
+					'How often checkpoints should be kept.')
 
 flags.DEFINE_integer('save_summaries_secs', 150,
-                     'How often should summaries be saved (in seconds).')
+					'How often should summaries be saved (in seconds).')
 
 flags.DEFINE_integer('save_interval_secs', 300,
-                     'How often should checkpoints be saved (in seconds).')
+					'How often should checkpoints be saved (in seconds).')
 
 flags.DEFINE_integer('log_every_n_steps', 100,
-                     'Logging interval for slim training loop.')
+					'Logging interval for slim training loop.')
 
 flags.DEFINE_integer('trace_every_n_steps', 1000,
-                     'Logging interval for slim training loop.')
+					'Logging interval for slim training loop.')
 
 flags.DEFINE_integer('max_steps', 500000, 
 					'Number of training steps.')
 
-def main(_):
-	"""Train FlowNet for a FLAGS.max_steps."""
 
-	# Get the lists of two images and the .flo file with a batch reader
-	data_lists = flownet.read_data_lists()
-
-	# we (have) split the Flying Chairs dataset into 22, 232 training and 640 test samples 
-	train_set = data_lists.train
-	imgs_np, flows_np  = train_set.next_batch(FLAGS.batchsize)
-
-	with tf.Graph().as_default():
-
-		# Generate tensors from numpy images and flows.
-		imgs_0, imgs_1, flows = flownet.convert_to_tensor(imgs_np, flows_np)
-
-		flownet.image_summary(imgs_0, imgs_1, "A", flows)
-
+def apply_augmentation(imgs_0, imgs_1, flows):
+	# apply augmenation to data batch
+	with tf.name_scope('augmentation'):
 		# chromatic tranformation in imagess
 		chroI_0, chroI_1 = flownet.chromatic_augm(imgs_0, imgs_1)
 
 		#affine tranformation in tf.py_func fo images and flows_pl
 		aug_data = [chroI_0, chroI_1, flows]
-		augI_0, augI_1, augF = flownet.affine_trafo(aug_data) 
+		augI_0, augI_1, augF = flownet.apply_affine_augmentation(aug_data) 
 
 		#rotation / scaling (Cropping) 
 		rotI_0, rotI_1, rotF = flownet.rotation(augI_0, augI_1, augF) 
 
-		calc_flows = flownet.inference(rotI_0, rotI_1)
+		return rotI_0, rotI_1, rotF 
 
-		# Image / Flow Summary
-		flownet.image_summary(rotI_0, rotI_1, "E_result", calc_flows)
+def main(_):
+	"""Train FlowNet for a FLAGS.max_steps."""
 
-		train_loss = flownet.train_loss(calc_flows, rotF)
+	with tf.Graph().as_default():
+
+		imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir)
+
+		# img summary after loading
+		flownet.image_summary(imgs_0, imgs_1, "A", flows)		
+
+		# apply augmentation
+		imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)
+
+		# model
+		calc_flows = flownet.model(imgs_0, imgs_1)
+
+		# output summary
+		flownet.image_summary(imgs_0, imgs_1, "E_result", calc_flows)
+
+		train_loss = flownet.train_loss(calc_flows, flows)
 
 		global_step = slim.get_or_create_global_step()
 
@@ -130,7 +131,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--datadir',
 	  type=str,
-	  default='data/FlyingChairs_examples/',
+	  default='data/train/',
 	  help='Directory to put the input data.'
 	)
 	parser.add_argument(
@@ -142,7 +143,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--imgsummary',
 	  type=bool,
-	  default=False,
+	  default=True,
 	  help='Make image summary'
 	)
 
