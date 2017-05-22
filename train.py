@@ -101,7 +101,7 @@ def main(_):
 
 		# output summary
 		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
-		flownet.image_summary(None, None, "F_result", flows)
+		flownet.image_summary(None, None, "F_result", calc_flows)
 
 		train_loss = flownet.train_loss(calc_flows, flows)
 
