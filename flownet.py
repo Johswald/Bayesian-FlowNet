@@ -30,9 +30,10 @@ def model(imgs_0, imgs_1):
 			"conv6_1" : [1024, [3,3], 1], 
 			}
 
- 	with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], padding='SAME',
+ 	with slim.arg_scope([slim.conv2d, slim.conv2d_transpose],
 					  activation_fn=tf.nn.relu,
-					  weights_regularizer=slim.l2_regularizer(1e-4)):
+					  weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
+					  weights_regularizer=slim.l2_regularizer(0.0005)):
 		#convolutions
 		for key in sorted(convs): 
 			net = slim.conv2d(net, convs[key][0], convs[key][1], convs[key][2], scope=key)
@@ -122,7 +123,7 @@ def chromatic_augm(imgs_0, imgs_1):
 							  for img, i in zip(tf.unstack(imgs_1), range(bs))])
 
 	# Image / Flow Summary
-	image_summary(chroI_0, chroI_1, "B_chrom", None)
+	#image_summary(chroI_0, chroI_1, "B_chrom", None)
 
 	return chroI_0, chroI_1
 
