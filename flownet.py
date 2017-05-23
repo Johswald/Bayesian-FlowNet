@@ -7,52 +7,10 @@ import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
-import glob
 
 import computeColor
 
 FLAGS = flags.FLAGS
-
-def model(imgs_0, imgs_1):
-	"""Build the flownet model """
-	net = tf.concat([imgs_0, imgs_1], FLAGS.img_shape[-1],  name='concat_0')
-	# stack of convolutions
-	# add mean ?
-	convs = {"conv1" : [64, [7,7], 2],
-			"conv2_1" : [128, [5,5], 2], # _1 to concat easily later
-			"conv3" : [256, [5,5], 2], 
-			"conv3_1" : [256, [3,3], 1], 
-			"conv4" : [512, [3,3], 2], 
-			"conv4_1" : [512, [3,3], 1], 
-			"conv5" : [512, [3,3], 2], 
-			"conv5_1" : [512, [3,3], 1],
-			"conv6" : [1024, [3,3], 2], 
-			"conv6_1" : [1024, [3,3], 1], 
-			}
-
- 	with slim.arg_scope([slim.conv2d, slim.conv2d_transpose],
-					  activation_fn=tf.nn.relu,
-					  weights_initializer=tf.truncated_normal_initializer(stddev=0.01),
-					  weights_regularizer=slim.l2_regularizer(0.0005)):
-		#convolutions
-		for key in sorted(convs): 
-			net = slim.conv2d(net, convs[key][0], convs[key][1], convs[key][2], scope=key)
-		#print([n.name for n in tf.get_default_graph().as_graph_def().node])
-		# deconv + flow
-		for i in range(4):
-			# flow predict + flow deconv
-			flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_' + str(6-i))
-			flow_up = slim.conv2d_transpose(flow_predict, 2, [4, 4], 2, scope='flow_dv_'+ str(6-i))
-			# devonv net + concat
-			deconv = slim.conv2d_transpose(net, 512/2**i , [4, 4], 2, scope='deconv_'+ str(5-i))
-			# get old convolution
-			to_concat = tf.get_default_graph().get_tensor_by_name('conv'+str(5-i)+"_1/Relu:0")
-			net = tf.concat([deconv, to_concat, flow_up], FLAGS.img_shape[-1], name='concat_' + str(i+1))
-		flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_pred')
-	# resize  with ResizeMethod.BILINEAR as default
-	flow_up = tf.image.resize_images(flow_predict, FLAGS.img_shape[:2])
-	return flow_up
-
 
 def apply_affine_augmentation(data):
 
@@ -245,15 +203,10 @@ def create_train_op(train_loss, global_step):
  	"""Sets up the training Ops."""
 	slim.model_analyzer.analyze_vars(
 		tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
-
-	learning_rate = tf.maximum(
-					tf.train.exponential_decay(
-						FLAGS.learning_rate,
-						global_step,
-						FLAGS.decay_steps,
-						FLAGS.decay_factor,
-						staircase=True),
-					FLAGS.minimum_learning_rate)
+	learning_rate = tf.train.piecewise_constant(
+							tf.cast(global_step, tf.int32),
+							FLAGS.boundaries,
+							FLAGS.values)
 	tf.summary.scalar('Learning_Rate', learning_rate)
 
 	trainer = tf.train.AdamOptimizer(learning_rate= learning_rate, beta1=0.9, 

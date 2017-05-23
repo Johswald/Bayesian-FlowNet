@@ -17,6 +17,7 @@ from tensorflow.python.training import saver as tf_saver
 
 import flownet
 import flownet_tools
+import architectures
 
 dir_path = dirname(os.path.realpath(__file__))
 
@@ -31,17 +32,14 @@ flags.DEFINE_integer('img_shape', [384, 512, 3],
 flags.DEFINE_integer('flow_shape', [384, 512, 2],
 					'Image shape: width, height, 2')
 
-flags.DEFINE_float('learning_rate', 1e-4,
-					'Initial learning rate')
+flags.DEFINE_boolean('augmentation', False,
+					'Use data augmentation')
 
-flags.DEFINE_float('minimum_learning_rate', 1e-6,
-					'Lower bound for learning rate.')
+flags.DEFINE_integer('boundaries', [300000, 400000],
+					'boundaries for learning rate')
 
-flags.DEFINE_float('decay_factor', 0.33, 
-					'Learning rate decay factor.')
-
-flags.DEFINE_float('decay_steps', 100000,
-					'Learning rate decay interval in steps.')
+flags.DEFINE_integer('values', [1e-4, (1e-4)/2, (1e-4)/2/2],
+					'learning rate values')
 
 flags.DEFINE_integer('img_summary_num', 2,
 					'Number of images in summary')
@@ -71,17 +69,18 @@ flags.DEFINE_integer('max_steps', 500000,
 def apply_augmentation(imgs_0, imgs_1, flows):
 	# apply augmenation to data batch
 	with tf.name_scope('augmentation'):
-		# chromatic tranformation in imagess
-		chroI_0, chroI_1 = flownet.chromatic_augm(imgs_0, imgs_1)
+		if FLAGS.augmentation:
+			# chromatic tranformation in imagess
+			imgs_0, imgs_1 = flownet.chromatic_augm(imgs_0, imgs_1)
 
-		#affine tranformation in tf.py_func fo images and flows_pl
-		aug_data = [chroI_0, chroI_1, flows]
-		augI_0, augI_1, augF = flownet.apply_affine_augmentation(aug_data) 
+			#affine tranformation in tf.py_func fo images and flows_pl
+			aug_data = [imgs_0, imgs_1, flows]
+			imgs_0, imgs_1, flows = flownet.apply_affine_augmentation(aug_data) 
 
-		#rotation / scaling (Cropping) 
-		rotI_0, rotI_1, rotF = flownet.rotation(augI_0, augI_1, augF) 
+			#rotation / scaling (Cropping) 
+			imgs_0, imgs_1, flows = flownet.rotation(imgs_0, imgs_1, flows) 
 
-		return rotI_0, rotI_1, rotF 
+	return imgs_0, imgs_1, flows
 
 def main(_):
 	"""Train FlowNet for a FLAGS.max_steps."""
@@ -97,7 +96,7 @@ def main(_):
 		imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)
 
 		# model
-		calc_flows = flownet.model(imgs_0, imgs_1)
+		calc_flows = architectures.flownet_s(imgs_0, imgs_1)
 
 		# output summary
 		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
