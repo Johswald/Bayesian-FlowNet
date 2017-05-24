@@ -81,7 +81,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--datadir',
 	  type=str,
-	  default='data/FlyingChairs_examples/',
+	  default='data/FlyingChairs_release/data/',
 	  help='Directory to put the input data.'
 	)
 	parser.add_argument(
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--imgsummary',
 	  type=bool,
-	  default=False,
+	  default=True,
 	  help='Make image summary'
 	)
 

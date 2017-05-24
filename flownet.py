@@ -188,28 +188,29 @@ def image_summary(imgs_0, imgs_1, text, flows):
 			flow_imgs = flows_to_img(flows)
 			tf.summary.image(text + "_flow", flow_imgs, FLAGS.img_summary_num)
 
-def train_loss(calc_flows, flows):
-	"""
+def add_loss(calc_flows, flows):
+	""" add absolute loss to the model 
 	loss on the aee (average endpoint error)
 	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3478865/
 	loss on chairs set: 2.71"""
   
-	abs_loss = tf.losses.absolute_difference(calc_flows, flows)
-	tf.summary.scalar('abs_loss', abs_loss)
-	# scale
-	return abs_loss
+	abs_loss = tf.losses.absolute_difference(calc_flows, flows, scope='absolute_loss')
 
-def create_train_op(train_loss, global_step):
+def create_train_op(global_step):
  	"""Sets up the training Ops."""
+
 	slim.model_analyzer.analyze_vars(
 		tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
 	learning_rate = tf.train.piecewise_constant(
 							tf.cast(global_step, tf.int32),
 							FLAGS.boundaries,
 							FLAGS.values)
-	tf.summary.scalar('Learning_Rate', learning_rate)
 
-	trainer = tf.train.AdamOptimizer(learning_rate= learning_rate, beta1=0.9, 
-									beta2=0.999, epsilon=1e-08, use_locking=False, name='Adam')
+	train_loss = tf.losses.get_total_loss()
+	tf.summary.scalar('Learning_Rate', learning_rate)
+	tf.summary.scalar('Training Loss', train_loss)
+
+	trainer = tf.train.AdamOptimizer(learning_rate)
+
 	train_op = slim.learning.create_train_op(train_loss, trainer)
 	return train_op

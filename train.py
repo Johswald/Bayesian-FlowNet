@@ -50,7 +50,7 @@ flags.DEFINE_integer('max_checkpoints', 5,
 flags.DEFINE_float('keep_checkpoint_every_n_hours', 5.0,
 					'How often checkpoints should be kept.')
 
-flags.DEFINE_integer('save_summaries_secs', 150,
+flags.DEFINE_integer('save_summaries_secs', 60,
 					'How often should summaries be saved (in seconds).')
 
 flags.DEFINE_integer('save_interval_secs', 300,
@@ -97,22 +97,26 @@ def main(_):
 
 		# model
 		calc_flows = architectures.flownet_s(imgs_0, imgs_1)
-
+		with tf.Session() as sess:
+			tf.train.start_queue_runners(sess)
+			print(flows, calc_flows)
+			print(flows.eval())
 		# output summary
 		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
 		flownet.image_summary(None, None, "F_result", calc_flows)
 
-		train_loss = flownet.train_loss(calc_flows, flows)
+		flownet.add_loss(calc_flows, flows)
 
 		global_step = slim.get_or_create_global_step()
 
-		train_op = flownet.create_train_op(train_loss, global_step)
+		train_op = flownet.create_train_op(global_step)
+
+		config = tf.ConfigProto()
+		config.gpu_options.allow_growth=True
 
 		saver = tf_saver.Saver(max_to_keep=FLAGS.max_checkpoints,
 						keep_checkpoint_every_n_hours=FLAGS.keep_checkpoint_every_n_hours)
 
-		config = tf.ConfigProto()
-		config.gpu_options.allow_growth=True
 		slim.learning.train(
 			train_op,
 			logdir=FLAGS.logdir + '/train',
