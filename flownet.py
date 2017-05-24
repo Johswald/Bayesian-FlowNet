@@ -1,5 +1,9 @@
-# FlowNet in Tensorflow
-# ==============================================================================
+""" 
+Definitions and utilities for the flownet model
+
+This file contains functions for data augmentation, summary and training ops for tensorflow training 
+
+"""
 
 import cv2
 import numpy as np
@@ -107,7 +111,8 @@ def rotation(imgs_0, imgs_1, flows):
 	#tf.summary.image("Rotation_", imgs_0, 4)
 	scales = []
 	boxes = []
-	# get scale needed to undo rotation mistake
+	# rotate image and crop out black borders
+	# pretty ugly
 	# http://stackoverflow.com/questions/16702966/rotate-image-and-crop-out-black-borders
 	for ang in angles: 
 		quadrant = int(math.floor(ang / (math.pi / 2))) & 3
@@ -187,14 +192,6 @@ def image_summary(imgs_0, imgs_1, text, flows):
 		if flows != None:
 			flow_imgs = flows_to_img(flows)
 			tf.summary.image(text + "_flow", flow_imgs, FLAGS.img_summary_num)
-
-def add_loss(calc_flows, flows):
-	""" add absolute loss to the model 
-	loss on the aee (average endpoint error)
-	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3478865/
-	loss on chairs set: 2.71"""
-  
-	abs_loss = tf.losses.absolute_difference(calc_flows, flows, scope='absolute_loss')
 
 def create_train_op(global_step):
  	"""Sets up the training Ops."""

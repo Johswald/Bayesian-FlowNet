@@ -24,7 +24,7 @@ dir_path = dirname(os.path.realpath(__file__))
 # Basic model parameters as external flags.
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('batchsize', 8, 'Batch size.')
+flags.DEFINE_integer('batchsize', 1, 'Batch size.')
 
 flags.DEFINE_integer('img_shape', [384, 512, 3],
 					'Image shape: width, height, channels')
@@ -60,7 +60,7 @@ flags.DEFINE_integer('log_every_n_steps', 100,
 					'Logging interval for slim training loop.')
 
 flags.DEFINE_integer('trace_every_n_steps', 1000,
-					'Logging interval for slim training loop.')
+					'Logging interval for trace.')
 
 flags.DEFINE_integer('max_steps', 500000, 
 					'Number of training steps.')
@@ -68,8 +68,9 @@ flags.DEFINE_integer('max_steps', 500000,
 
 def apply_augmentation(imgs_0, imgs_1, flows):
 	# apply augmenation to data batch
-	with tf.name_scope('augmentation'):
-		if FLAGS.augmentation:
+	
+	if FLAGS.augmentation:
+		with tf.name_scope('augmentation'):
 			# chromatic tranformation in imagess
 			imgs_0, imgs_1 = flownet.chromatic_augm(imgs_0, imgs_1)
 
@@ -79,7 +80,8 @@ def apply_augmentation(imgs_0, imgs_1, flows):
 
 			#rotation / scaling (Cropping) 
 			imgs_0, imgs_1, flows = flownet.rotation(imgs_0, imgs_1, flows) 
-
+		# output summary
+		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
 	return imgs_0, imgs_1, flows
 
 def main(_):
@@ -96,16 +98,10 @@ def main(_):
 		imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)
 
 		# model
-		calc_flows = architectures.flownet_s(imgs_0, imgs_1)
-		with tf.Session() as sess:
-			tf.train.start_queue_runners(sess)
-			print(flows, calc_flows)
-			print(flows.eval())
-		# output summary
-		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
-		flownet.image_summary(None, None, "F_result", calc_flows)
+		calc_flows = architectures.flownet_s(imgs_0, imgs_1, flows)
 
-		flownet.add_loss(calc_flows, flows)
+		# img summary of result
+		flownet.image_summary(None, None, "F_result", calc_flows)
 
 		global_step = slim.get_or_create_global_step()
 
