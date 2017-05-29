@@ -11,6 +11,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.platform import flags
 
+import flownet
+
 FLAGS = flags.FLAGS
 
 def get_data(datadir):
@@ -18,13 +20,19 @@ def get_data(datadir):
 	....
 	"""
 	with tf.name_scope('Input'):
+
+		flow_imgs = sorted(glob.glob(datadir + '*flow.png'))
+
 		list_0 = sorted(glob.glob(datadir + '*img1.jpg'))
 		list_1 = sorted(glob.glob(datadir + '*img2.jpg'))
 		flow_list = sorted(glob.glob(datadir + '*.flo'))
-		print(len(list_0), len(list_1), len(flow_list))
 		assert len(list_0) == len(list_1) == len(flow_list), ('Input Lengths not correct')
 		# shuffle 
+		print("Number of input length: " + str(len(list_0)))
 		p = np.random.permutation(len(list_0))
+
+		flow_imgs = [flow_imgs[i] for i in p]
+
 		list_0 = [list_0[i] for i in p]
 		list_1 = [list_1[i] for i in p]
 		flow_list = [flow_list[i] for i in p]
@@ -32,11 +40,21 @@ def get_data(datadir):
 		input_queue = tf.train.slice_input_producer(
 										[list_0, list_1], 
 										shuffle=False) # shuffled before
+
+		flow_imgs_l = tf.train.slice_input_producer(
+										[flow_imgs], 
+										shuffle=False) # shuffled before
 		# image reader
 		content_0 = tf.read_file(input_queue[0])
 		content_1 = tf.read_file(input_queue[1])
+
+		content_2 = tf.read_file(flow_imgs_l[0])
+
 		imgs_0 = tf.image.decode_jpeg(content_0, channels=3)
 		imgs_1 = tf.image.decode_jpeg(content_1, channels=3)
+		
+		flow_imgs_0 = tf.image.decode_png(content_2, channels=3)
+		
 		imgs_0 = tf.image.convert_image_dtype(imgs_0, tf.float32)
 		imgs_1 = tf.image.convert_image_dtype(imgs_1, tf.float32)
 
@@ -51,13 +69,14 @@ def get_data(datadir):
 		size  = tf.slice(record_bytes, [1], [2]) # size of flow / image
 		flows = tf.slice(record_bytes, [3], [np.prod(FLAGS.flow_shape)])
 		flows = tf.reshape(flows, FLAGS.flow_shape)
-		
+
 		# set shape
 		imgs_0.set_shape(FLAGS.img_shape)
 		imgs_1.set_shape(FLAGS.img_shape)
+		flow_imgs_0.set_shape(FLAGS.img_shape)
 		flows.set_shape(FLAGS.flow_shape)
 
-		return tf.train.batch( [imgs_0, imgs_1, flows],
+		return tf.train.batch( [imgs_0, imgs_1, flows, flow_imgs_0],
 		                      batch_size=FLAGS.batchsize
 		                      #,num_threads=1
 		                      )

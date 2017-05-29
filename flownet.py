@@ -13,6 +13,7 @@ import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
 	
 import computeColor
+import readFlowFile
 
 FLAGS = flags.FLAGS
 
@@ -173,21 +174,23 @@ def flows_to_img(flows):
 		""" Transorm Cartesian Flow to rgb flow image for visualisation """
 
 		flow_imgs = []
-		h, w = FLAGS.flow_shape[:2]
 		for flow in flows:
 			img = computeColor.computeImg(flow)
+			# cv2 returns bgr images
+			b,g,r = cv2.split(img)
+			img = cv2.merge((r,g,b))
 			flow_imgs.append(img)
 		return [flow_imgs]
 
 	flow_imgs = tf.py_func( _flow_transform, [flows], 
-						 [tf.uint8], name='flow_transform')[0]
+					 [tf.uint8], stateful = False, name='flow_transform')
 
-	flow_imgs.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
+	flow_imgs = tf.squeeze(tf.stack(flow_imgs))
+	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.img_shape)		
 	return flow_imgs
 
 def image_summary(imgs_0, imgs_1, text, flows):
 	""" Write image summary for tensorboard / data augmenation """ 
-
 	if FLAGS.imgsummary:
 		if imgs_0 != None and imgs_1 != None:
 			tf.summary.image(text + "_img_0", imgs_0, FLAGS.img_summary_num)
