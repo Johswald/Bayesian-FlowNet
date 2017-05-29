@@ -14,21 +14,24 @@ from tensorflow.python.client import timeline
 from tensorflow.python.platform import flags
 from tensorflow.python.training import saver as tf_saver
 import math
+
 import flownet
+import flownet_tools
+import architectures
 
 dir_path = dirname(os.path.realpath(__file__))
 
 # Basic model parameters as external flags.
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('splitlist', 'data/FlyingChairs_release_test_train_split.list',
-                           'List where to split train / test')
-
 flags.DEFINE_integer('batchsize', 8, 'Batch size for eval loop.')
 
 flags.DEFINE_integer('eval_interval_secs', 300,
                      'How many seconds between executions of the eval loop.')
-	
+
+flags.DEFINE_integer('testsize', 640,
+                     'Number of test samples')
+
 flags.DEFINE_integer('img_shape', [384, 512, 3],
                            'Image shape: width, height, channels')
 
@@ -44,24 +47,20 @@ flags.DEFINE_integer('img_summary_num', 2,
 def main(_):
 	"""Evaluate FlowNet for test set"""
 
-	# Get the lists of two images and the .flo file with a batch reader
-	data_lists = flownet.read_data_lists()
-	# we (have) split the Flying Chairs dataset into 22, 232 training and 640 test samples 
-	test_set = data_lists.test
-	print(test_set._num_examples)
-	imgs_np, flows_np  = test_set.next_batch(FLAGS.batchsize)
-	# Add the variable initializer Op.
 	with tf.Graph().as_default():
 		# Generate tensors from numpy images and flows.
-		imgs_0, imgs_1, flows = flownet.convert_to_tensor(imgs_np, flows_np)
-		flownet.image_summary(imgs_0, imgs_1, "Ground Trouth", flows)
+		imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir)
+
+		# img summary after loading
+		flownet.image_summary(imgs_0, imgs_1, "A_input", flows)	
 
 		# Get flow tensor from flownet model
-		calc_flows = flownet.inference(imgs_0, imgs_1)
-		loss = flownet.train_loss(calc_flows, flows)
-		flownet.image_summary(imgs_0, imgs_1, "Result", calc_flows)
+		calc_flows = architectures.flownet_s(imgs_0, imgs_1, flowss)
+		loss = tf.losses.get_total_loss()#
+		tf.summary.scalar('Training Loss', loss)
+		flownet.image_summary(None, None, "Result", calc_flows)
 		# Run the actual evaluation loop.
-		num_batches = math.ceil(test_set._num_examples / float(FLAGS.batchsize))
+		num_batches = math.ceil(FLAGS.testsize / float(FLAGS.batchsize))
 
 		config = tf.ConfigProto()
 		config.gpu_options.allow_growth=True
@@ -81,7 +80,7 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--datadir',
 	  type=str,
-	  default='data/FlyingChairs_release/data/',
+	  default='data/test/',
 	  help='Directory to put the input data.'
 	)
 	parser.add_argument(

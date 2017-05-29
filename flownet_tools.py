@@ -1,7 +1,7 @@
 """ 
 Definitions and utilities for the flownet model
 
-This file contains functions for .jpg and .flo tensorflow reader for Flownet training and evalutation
+This file contains functions to read .jpg and .flo to tensorflow for Flownet training and evalutation
 on the Flying Chairs Datatset.
 
 """
@@ -21,6 +21,7 @@ def get_data(datadir):
 		list_0 = sorted(glob.glob(datadir + '*img1.jpg'))
 		list_1 = sorted(glob.glob(datadir + '*img2.jpg'))
 		flow_list = sorted(glob.glob(datadir + '*.flo'))
+		print(len(list_0), len(list_1), len(flow_list))
 		assert len(list_0) == len(list_1) == len(flow_list), ('Input Lengths not correct')
 		# shuffle 
 		p = np.random.permutation(len(list_0))

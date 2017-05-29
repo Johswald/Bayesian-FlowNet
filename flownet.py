@@ -11,22 +11,26 @@ import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
-
+	
 import computeColor
 
 FLAGS = flags.FLAGS
 
-def apply_affine_augmentation(data):
+flags.DEFINE_float('max_rotate_angle', 0.17, 
+						'max rotation angle')
+
+def affine_augm(imgs_0, imgs_1, flows):
+	"""Pyfunc wrapper for randomized affine transformations."""
 
 	def _affine_transform(imgs_0, imgs_1, flows):
-		"""Affine Transformation with OpenCV help (warpAffine)"""
+		"""Affine Transformation with cv2 (warpAffine)"""
 
 		bs = FLAGS.batchsize
 		h, w, ch = FLAGS.img_shape
 		c = np.float32([w, h]) / 2.0
 		mat = np.random.normal(size=[bs, 2, 3])
-		mat[:, :2, :2] = mat[:, :2, :2] * 0.2 + np.eye(2)
-		mat[:, :, 2] = mat[:, :, 2] * 0.8 + c - mat[:, :2, :2].dot(c)
+		mat[:, :2, :2] = mat[:, :2, :2] * 0.15 + np.eye(2)
+		mat[:, :, 2] = mat[:, :, 2] * 2 + c - mat[:, :2, :2].dot(c)
 		for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)): 
 			aug_0 = cv2.warpAffine(img_0, mat_i, (w, h), borderMode=3)
 			aug_1 = cv2.warpAffine(img_1, mat_i, (w, h), borderMode=3)
@@ -40,9 +44,8 @@ def apply_affine_augmentation(data):
 			flows[i] = aug_f
 	 	return [imgs_0, imgs_1, flows]
 
-	"""affine transformation """
 	shape = FLAGS.img_shape
-	aug_data = tf.py_func( _affine_transform, [data[0], data[1], data[2]], 
+	aug_data = tf.py_func( _affine_transform, [imgs_0, imgs_1, flows], 
 					[tf.float32, tf.float32, tf.float32], name='affine_transform')
 	augI_0, augI_1, augF = aug_data[:]
 	augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
@@ -50,7 +53,7 @@ def apply_affine_augmentation(data):
 	augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
 
 	# Image / Flow Summary
-	#image_summary(augI_0, augI_1, "C_affine", augF)
+	image_summary(augI_0, augI_1, "B_affine", augF)
 	return augI_0, augI_1, augF
 
 def chromatic_augm(imgs_0, imgs_1):
@@ -85,11 +88,12 @@ def chromatic_augm(imgs_0, imgs_1):
 							  for img, i in zip(tf.unstack(imgs_1), range(bs))])
 
 	# Image / Flow Summary
-	#image_summary(chroI_0, chroI_1, "B_chrom", None)
+	image_summary(chroI_0, chroI_1, "D_chrom", None)
 
 	return chroI_0, chroI_1
 
-def rotation(imgs_0, imgs_1, flows):
+def rotation_crop(imgs_0, imgs_1, flows):
+	# pretty ugly (TODO: check cv2 warp affine rotate)
 	"""image rotation/scaling. 
 	Specifically we sample 
 	- translation from a the range [ 20%, 20%] 
@@ -101,7 +105,7 @@ def rotation(imgs_0, imgs_1, flows):
 	h, w = FLAGS.img_shape[:2]
 
 	#- rotation from [ -17 , 17 ]; 
-	angles = np.random.uniform(-0.17, 0.17, bs)
+	angles = np.random.uniform(-FLAGS.max_rotate_angle, FLAGS.max_rotate_angle, bs)
 	imgs_0 = tf.contrib.image.rotate(imgs_0, angles)
 	imgs_1 = tf.contrib.image.rotate(imgs_1, angles)
 	flows = tf.contrib.image.rotate(flows, angles)
@@ -112,7 +116,6 @@ def rotation(imgs_0, imgs_1, flows):
 	scales = []
 	boxes = []
 	# rotate image and crop out black borders
-	# pretty ugly
 	# http://stackoverflow.com/questions/16702966/rotate-image-and-crop-out-black-borders
 	for ang in angles: 
 		quadrant = int(math.floor(ang / (math.pi / 2))) & 3
@@ -160,7 +163,7 @@ def rotation(imgs_0, imgs_1, flows):
 	rotF = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
 
 	# Image / Flow Summary
-	#image_summary(rotI_0, rotI_1, "D_rotation", rotF)
+	image_summary(rotI_0, rotI_1, "C_rotation", rotF)
 	return rotI_0, rotI_1, rotF
 
 def flows_to_img(flows):
@@ -208,6 +211,5 @@ def create_train_op(global_step):
 	tf.summary.scalar('Training Loss', train_loss)
 
 	trainer = tf.train.AdamOptimizer(learning_rate)
-
 	train_op = slim.learning.create_train_op(train_loss, trainer)
 	return train_op

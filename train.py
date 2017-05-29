@@ -1,6 +1,7 @@
-# FlowNet in Tensorflow
-# Training
-# ==============================================================================
+""" 
+Flownet training module
+
+"""
 
 import sys
 import argparse
@@ -24,7 +25,7 @@ dir_path = dirname(os.path.realpath(__file__))
 # Basic model parameters as external flags.
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('batchsize', 1, 'Batch size.')
+flags.DEFINE_integer('batchsize', 8, 'Batch size.')
 
 flags.DEFINE_integer('img_shape', [384, 512, 3],
 					'Image shape: width, height, channels')
@@ -70,18 +71,18 @@ def apply_augmentation(imgs_0, imgs_1, flows):
 	# apply augmenation to data batch
 	
 	if FLAGS.augmentation:
-		with tf.name_scope('augmentation'):
+		with tf.name_scope('Augmentation'):
+		
+			#affine tranformation in tf.py_func fo images and flows_pl
+			imgs_0, imgs_1, flows = flownet.affine_augm(imgs_0, imgs_1, flows) 
+
+			#rotation / scaling (Cropping) 
+			imgs_0, imgs_1, flows = flownet.rotation_crop(imgs_0, imgs_1, flows) 
+
 			# chromatic tranformation in imagess
 			imgs_0, imgs_1 = flownet.chromatic_augm(imgs_0, imgs_1)
 
-			#affine tranformation in tf.py_func fo images and flows_pl
-			aug_data = [imgs_0, imgs_1, flows]
-			imgs_0, imgs_1, flows = flownet.apply_affine_augmentation(aug_data) 
-
-			#rotation / scaling (Cropping) 
-			imgs_0, imgs_1, flows = flownet.rotation(imgs_0, imgs_1, flows) 
-		# output summary
-		flownet.image_summary(imgs_0, imgs_1, "E_augm_", flows)
+		flownet.image_summary(imgs_0, imgs_1, "B_after_augm", flows)
 	return imgs_0, imgs_1, flows
 
 def main(_):
@@ -92,7 +93,7 @@ def main(_):
 		imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir)
 
 		# img summary after loading
-		flownet.image_summary(imgs_0, imgs_1, "A", flows)		
+		flownet.image_summary(imgs_0, imgs_1, "A_input", flows)		
 
 		# apply augmentation
 		imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)
@@ -101,7 +102,7 @@ def main(_):
 		calc_flows = architectures.flownet_s(imgs_0, imgs_1, flows)
 
 		# img summary of result
-		flownet.image_summary(None, None, "F_result", calc_flows)
+		flownet.image_summary(None, None, "E_result", calc_flows)
 
 		global_step = slim.get_or_create_global_step()
 
