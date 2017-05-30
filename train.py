@@ -89,10 +89,10 @@ def main(_):
 
 	with tf.Graph().as_default():
 
-		imgs_0, imgs_1, flows, flow_imgs = flownet_tools.get_data(FLAGS.datadir)
+		imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir)
 
 		# img summary after loading
-		#flownet.image_summary(imgs_0, imgs_1, "A_input", flows)
+		flownet.image_summary(imgs_0, imgs_1, "A_input", flows)
 
 		# apply augmentation
 		imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)

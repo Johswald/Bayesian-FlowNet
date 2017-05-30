@@ -55,7 +55,7 @@ def main(_):
 		flownet.image_summary(imgs_0, imgs_1, "A_input", flows)	
 
 		# Get flow tensor from flownet model
-		calc_flows = architectures.flownet_s(imgs_0, imgs_1, flowss)
+		calc_flows = architectures.flownet_s(imgs_0, imgs_1, flows)
 		loss = tf.losses.get_total_loss()#
 		tf.summary.scalar('Training Loss', loss)
 		flownet.image_summary(None, None, "Result", calc_flows)
