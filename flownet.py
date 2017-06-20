@@ -1,7 +1,7 @@
-""" 
+"""
 Definitions and utilities for the flownet model
 
-This file contains functions for data augmentation, summary and training ops for tensorflow training 
+This file contains functions for data augmentation, summary and training ops for tensorflow training
 
 """
 
@@ -11,13 +11,13 @@ import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
-	
+
 import computeColor
 import readFlowFile
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float('max_rotate_angle', 0.17, 
+flags.DEFINE_float('max_rotate_angle', 0.17,
 						'max rotation angle')
 
 def affine_augm(imgs_0, imgs_1, flows):
@@ -32,7 +32,7 @@ def affine_augm(imgs_0, imgs_1, flows):
 		mat = np.random.normal(size=[bs, 2, 3])
 		mat[:, :2, :2] = mat[:, :2, :2] * 0.15 + np.eye(2)
 		mat[:, :, 2] = mat[:, :, 2] * 2 + c - mat[:, :2, :2].dot(c)
-		for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)): 
+		for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)):
 			aug_0 = cv2.warpAffine(img_0, mat_i, (w, h), borderMode=3)
 			aug_1 = cv2.warpAffine(img_1, mat_i, (w, h), borderMode=3)
 			aug_f = cv2.warpAffine(flow, mat_i, (w, h), borderMode=3)
@@ -46,7 +46,7 @@ def affine_augm(imgs_0, imgs_1, flows):
 	 	return [imgs_0, imgs_1, flows]
 
 	shape = FLAGS.img_shape
-	aug_data = tf.py_func( _affine_transform, [imgs_0, imgs_1, flows], 
+	aug_data = tf.py_func( _affine_transform, [imgs_0, imgs_1, flows],
 					[tf.float32, tf.float32, tf.float32], name='affine_transform')
 	augI_0, augI_1, augF = aug_data[:]
 	augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
@@ -60,17 +60,17 @@ def affine_augm(imgs_0, imgs_1, flows):
 def chromatic_augm(imgs_0, imgs_1):
 	"""TODO: Check chromatic data augm examples in the web"""
 	"""chromatic augmentation. (brightness, contrast, gamma, and color)
-	(- The Gaussian noise has a sigma uniformly sampled 
+	(- The Gaussian noise has a sigma uniformly sampled
 	from [0, 0.04]; Gaussian Blur in Affine Trafo)
-	- contrast is sampled within [-0.8, 0.4]; 
-	- multiplicative color changes to the RGB channels per image from [0.5, 2]; 
-	- gamma values from [0.7, 1.5] and 
+	- contrast is sampled within [-0.8, 0.4];
+	- multiplicative color changes to the RGB channels per image from [0.5, 2];
+	- gamma values from [0.7, 1.5] and
 	- additive brightness changes using Gaussian with a sigma of 0.2.
 	"""
 	bs = FLAGS.batchsize
-	# multiplicative color changes to the RGB channels per image from [0.5, 2]; 
+	# multiplicative color changes to the RGB channels per image from [0.5, 2];
 	# 1. Own testet replacement with saturation / hue
-	# 2. gamma values from [0.7, 1.5] and 
+	# 2. gamma values from [0.7, 1.5] and
 	# 3. Own testet brightness changes
 	# different transformation in batch
 	hue = np.random.uniform(-1, 1, bs)
@@ -95,17 +95,17 @@ def chromatic_augm(imgs_0, imgs_1):
 
 def rotation_crop(imgs_0, imgs_1, flows):
 	# pretty ugly (TODO: check cv2 warp affine rotate)
-	"""image rotation/scaling. 
-	Specifically we sample 
-	- translation from a the range [ 20%, 20%] 
-	of the image width for x and y; 
-	- rotation from [ -17 , 17 ]; 
-	- scaling from [0.9, 2.0]. 
+	"""image rotation/scaling.
+	Specifically we sample
+	- translation from a the range [ 20%, 20%]
+	of the image width for x and y;
+	- rotation from [ -17 , 17 ];
+	- scaling from [0.9, 2.0].
 	"""
 	bs = FLAGS.batchsize
 	h, w = FLAGS.img_shape[:2]
 
-	#- rotation from [ -17 , 17 ]; 
+	#- rotation from [ -17 , 17 ];
 	angles = np.random.uniform(-FLAGS.max_rotate_angle, FLAGS.max_rotate_angle, bs)
 	imgs_0 = tf.contrib.image.rotate(imgs_0, angles)
 	imgs_1 = tf.contrib.image.rotate(imgs_1, angles)
@@ -118,7 +118,7 @@ def rotation_crop(imgs_0, imgs_1, flows):
 	boxes = []
 	# rotate image and crop out black borders
 	# http://stackoverflow.com/questions/16702966/rotate-image-and-crop-out-black-borders
-	for ang in angles: 
+	for ang in angles:
 		quadrant = int(math.floor(ang / (math.pi / 2))) & 3
 		sign_alpha = ang if ((quadrant & 1) == 0) else math.pi - ang
 		alpha = (sign_alpha % math.pi + math.pi) % math.pi
@@ -145,10 +145,10 @@ def rotation_crop(imgs_0, imgs_1, flows):
 		if scale <= 0.5:
 			boxes.append([x1, y1, x2, y2])
 		else:
-			# random choose scale smaller than 2 and 
+			# random choose scale smaller than 2 and
 			# random choose box to crop from the window given by roation -> random translation
 			# new scale has to big enough to cut rotation error out
-			new_scale = np.random.uniform(0.5, scale) 
+			new_scale = np.random.uniform(0.5, scale)
 			new_width = w*new_scale
 			new_height = h*new_scale
 			x1_s = x1 + np.random.uniform(0, 1- new_width/max_width)
@@ -182,15 +182,15 @@ def flows_to_img(flows):
 			flow_imgs.append(img)
 		return [flow_imgs]
 
-	flow_imgs = tf.py_func( _flow_transform, [flows], 
+	flow_imgs = tf.py_func( _flow_transform, [flows],
 					 [tf.uint8], stateful = False, name='flow_transform')
 
 	flow_imgs = tf.squeeze(tf.stack(flow_imgs))
-	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.img_shape)		
+	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.img_shape)
 	return flow_imgs
 
 def image_summary(imgs_0, imgs_1, text, flows):
-	""" Write image summary for tensorboard / data augmenation """ 
+	""" Write image summary for tensorboard / data augmenation """
 	if FLAGS.imgsummary:
 		if imgs_0 != None and imgs_1 != None:
 			tf.summary.image(text + "_img_0", imgs_0, FLAGS.img_summary_num)
