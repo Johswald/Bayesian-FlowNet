@@ -1,1 +1,3 @@
-# flownet_tf
+# FlowNet in Tensorflow
+
+(still fine tuning ...)
