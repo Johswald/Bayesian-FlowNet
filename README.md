@@ -1,3 +1,5 @@
 # FlowNet in Tensorflow
 
-(still fine tuning ...)
+TODO:
+1. data augmentation
+2. fine tuning
