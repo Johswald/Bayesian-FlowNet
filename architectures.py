@@ -40,9 +40,9 @@ def flownet_s(imgs_0, imgs_1, flows):
     #convolutions + relu
     with slim.arg_scope([slim.conv2d],
 			activation_fn=tf.nn.relu,
-			padding='SAME',
 			#TODO: test [1e-3, 1e-4, 1e-5]
-			weights_regularizer=slim.l2_regularizer(1e-4)):
+			#weights_regularizer=slim.l2_regularizer(1e-4)
+			):
     	for key, value in sorted(convs.iteritems()):
             net = slim.conv2d(net, value[0], value[1], value[2], scope=key)
     
@@ -51,9 +51,9 @@ def flownet_s(imgs_0, imgs_1, flows):
         # no relu
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], 
 			    activation_fn=None,
-		            padding='SAME',
 			     #TODO: test [1e-3, 1e-4, 1e-5],
-                            weights_regularizer=slim.l2_regularizer(1e-4)):
+                            #weights_regularizer=slim.l2_regularizer(1e-4)
+			   ):
             flow_predict = slim.conv2d(
                 net, 2, [3, 3], 1, scope='predict_flow_' + str(6 - i))
             flow_up = slim.conv2d_transpose(
@@ -80,9 +80,9 @@ def flownet_s(imgs_0, imgs_1, flows):
     # last prediction
     with slim.arg_scope([slim.conv2d],
                         activation_fn=None,
-			padding='SAME',
                         #TODO: test [1e-3, 1e-4, 1e-5]    
-			 weights_regularizer=slim.l2_regularizer(1e-4)):
+			 #weights_regularizer=slim.l2_regularizer(1e-4)
+			):
 	flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_pred')
     # resize  with ResizeMethod.BILINEAR ?
     # check if this sampling is correct by visualisation 
