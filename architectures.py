@@ -79,8 +79,8 @@ def flownet_s(imgs_0, imgs_1, flows):
 
     # last prediction
     with slim.arg_scope([slim.conv2d],
-                        activation_fn=tf.nn.relu,
-                        padding='SAME',
+                        activation_fn=None,
+			padding='SAME',
                         #TODO: test [1e-3, 1e-4, 1e-5]    
 			 weights_regularizer=slim.l2_regularizer(1e-4)):
 	flow_predict = slim.conv2d(net, 2, [3, 3], 1, scope='flow_pred')
