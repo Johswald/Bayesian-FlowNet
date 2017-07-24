@@ -33,19 +33,16 @@ flags.DEFINE_integer('img_shape', [384, 512, 3],
 flags.DEFINE_integer('flow_shape', [384, 512, 2],
                      'Image shape: width, height, 2')
 
-flags.DEFINE_boolean('augmentation', False,
-                     'Use data augmentation')
-"""
-flags.DEFINE_integer('boundaries', [i*100000 for i in range(3,10)],
+flags.DEFINE_integer('boundaries', [i*100000 for i in range(3,11)],
 					'boundaries for learning rate')
 
-flags.DEFINE_integer('values', [1e-4/(2**i) for i in range(0,7)],
+flags.DEFINE_integer('values', [1e-4/(2**i) for i in range(0,8)],
 					'learning rate values')
 """
-flags.DEFINE_integer('boundaries', [300000,  400000, 500000],
+flags.DEFINE_integer('boundaries', [300000, 400000, 500000, 600000],
                      'boundaries for learning rate')
-
-flags.DEFINE_integer('values', [1e-4, 1e-4 / 2, 1e-4 / 2 / 2],
+"""
+flags.DEFINE_integer('learning_rate', 1e-4,
                      'learning rate values')
 
 flags.DEFINE_integer('img_summary_num', 2,
@@ -69,7 +66,7 @@ flags.DEFINE_integer('log_every_n_steps', 100,
 flags.DEFINE_integer('trace_every_n_steps', 1000,
                      'Logging interval for trace.')
 
-flags.DEFINE_integer('max_steps', 700000,
+flags.DEFINE_integer('max_steps', 1000000,
                      'Number of training steps.')
 
 
@@ -135,19 +132,19 @@ def main(_):
             number_of_steps=FLAGS.max_steps,
         )
 
+if __name__ == "__main__":
 
-if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--datadir',
         type=str,
-        default='data/train/',
+        default='data/flying/train/',
         help='Directory to put the input data.'
     )
     parser.add_argument(
         '--logdir',
         type=str,
-        default='log_flownet_s',
+        default='log_fn_s_again',
         help='Directory where to write event logs and checkpoints'
     )
     parser.add_argument(
@@ -156,8 +153,26 @@ if __name__ == '__main__':
         default=True,
         help='Make image summary'
     )
+    parser.add_argument(
+        '--augmentation',
+        type=bool,
+        default=True,
+        help='Make data augmentation'
+    )
+    parser.add_argument(
+        '--weights_reg',
+        type=float,
+        default=0,
+        help='weights regularizer'
+    )
+    args = parser.parse_known_args()[0]
+    FLAGS.datadir = os.path.join(dir_path,  args.datadir)
+    FLAGS.logdir = os.path.join(dir_path, args.logdir)
+    FLAGS.imgsummary = args.imgsummary
 
-    FLAGS.datadir = os.path.join(dir_path,  parser.parse_args().datadir)
-    FLAGS.logdir = os.path.join(dir_path, parser.parse_args().logdir)
-    FLAGS.imgsummary = parser.parse_args().imgsummary
+    if parser.parse_args().weights_reg != 0:
+	FLAGS.weights_reg = slim.l2_regularizer(args.weights_reg)
+    else:
+    	FLAGS.weights_reg = None
+    FLAGS.augmentation = args.augmentation
     tf.app.run()

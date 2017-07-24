@@ -1,0 +1,6 @@
+length_f = tf.norm(flows, axis= -1)
+               length_cf = tf.norm(calc_flows, axis= -1)
+               length_cf = tf.where(tf.not_equal(length_cf, tf.zeros_like(length_cf)), length_cf, tf.ones_like(length_cf))
+               length_f  = tf.where(tf.not_equal(length_f, tf.zeros_like(length_f)), length_f, tf.ones_like(length_f))
+               dot = tf.add(tf.multiply(x_f, x_cf), tf.multiply(y_f, y_cf))
+               aae = tf.metrics.mean(tf.acos(dot))

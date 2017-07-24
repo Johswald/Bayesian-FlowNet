@@ -54,7 +54,7 @@ def affine_augm(imgs_0, imgs_1, flows):
 	augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
 
 	# Image / Flow Summary
-	image_summary(augI_0, augI_1, "B_affine", augF)
+	#image_summary(augI_0, augI_1, "B_affine", augF)
 	return augI_0, augI_1, augF
 
 def chromatic_augm(imgs_0, imgs_1):
@@ -89,7 +89,7 @@ def chromatic_augm(imgs_0, imgs_1):
 							  for img, i in zip(tf.unstack(imgs_1), range(bs))])
 
 	# Image / Flow Summary
-	image_summary(chroI_0, chroI_1, "D_chrom", None)
+	# image_summary(chroI_0, chroI_1, "D_chrom", None)
 
 	return chroI_0, chroI_1
 
@@ -164,7 +164,7 @@ def rotation_crop(imgs_0, imgs_1, flows):
 	rotF = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
 
 	# Image / Flow Summary
-	image_summary(rotI_0, rotI_1, "C_rotation", rotF)
+	# image_summary(rotI_0, rotI_1, "C_rotation", rotF)
 	return rotI_0, rotI_1, rotF
 
 def flows_to_img(flows):
@@ -204,11 +204,25 @@ def create_train_op(global_step):
 
 	slim.model_analyzer.analyze_vars(
 		tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
-	learning_rate = tf.train.piecewise_constant(
+        
+	
+	"""
+	linear learning rate, starting at 1e-4, after 300.000 each 100.000 devide by two.
+	to have the similiar learning rate 
+	"""
+	learning_rate = tf.train.polynomial_decay(FLAGS.learning_rate,
+							tf.cast(global_step, tf.int32),
+							FLAGS.max_steps,
+							end_learning_rate=FLAGS.learning_rate/2**8)
+	
+	
+	print(FLAGS.boundaries)
+	print(FLAGS.values)
+	"""learning_rate = tf.train.piecewise_constant(
 							tf.cast(global_step, tf.int32),
 							FLAGS.boundaries,
 							FLAGS.values)
-
+	"""
 	train_loss = tf.losses.get_total_loss()
 	tf.summary.scalar('Learning_Rate', learning_rate)
 	tf.summary.scalar('Training Loss', train_loss)

@@ -112,13 +112,13 @@ if __name__ == '__main__':
 	parser.add_argument(
 	  '--datadir',
 	  type=str,
-	  default='data/test/',
+	  default='data/flying/test/',
 	  help='Directory to put the input data.'
 	)
 	parser.add_argument(
 	  '--logdir',
 	  type=str,
-	  default='log_flownet_s',
+	  default='log_fn_s_again',
 	  help='Directory where to write event logs and checkpoints'
 	)
 	parser.add_argument(
@@ -127,8 +127,19 @@ if __name__ == '__main__':
 	  default=True,
 	  help='Make image summary'
 	)
-
+        parser.add_argument(
+            '--weights_reg',
+            type=float,
+            default=0,
+            help='weights regularizer'
+        )
 	FLAGS.datadir = os.path.join(dir_path,  parser.parse_args().datadir)
 	FLAGS.logdir = os.path.join(dir_path, parser.parse_args().logdir)
 	FLAGS.imgsummary = parser.parse_args().imgsummary
+	
+        if parser.parse_args().weights_reg != 0:
+            FLAGS.weights_reg = slim.l2_regularizer(args.weights_reg)
+        else:
+            FLAGS.weights_reg = None
+
 	tf.app.run()
