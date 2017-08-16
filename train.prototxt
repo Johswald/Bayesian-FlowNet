@@ -80,7 +80,7 @@ layer {
   bottom: "blob4"
   top: "img0_aug"
   top: "blob7"
-  propagate_down: false 
+  propagate_down: false
   augmentation_param {
     max_multiplier: 1
     augment_during_test: false
@@ -296,8 +296,8 @@ layer {
   bottom: "blob5"
   bottom: "blob8"
   top: "img1_aug"
-  propagate_down: false 
-  propagate_down: false 
+  propagate_down: false
+  propagate_down: false
   augmentation_param {
     max_multiplier: 1
     augment_during_test: false
@@ -741,8 +741,8 @@ layer {
   bottom: "scaled_flow_gt"
   bottom: "predict_flow6"
   top: "blob24"
-  propagate_down: false 
-  propagate_down: false 
+  propagate_down: false
+  propagate_down: false
 }
 layer {
   name: "flow_loss6"
@@ -859,7 +859,7 @@ layer {
   bottom: "scaled_flow_gt"
   bottom: "predict_flow5"
   top: "blob29"
-  propagate_down: false 
+  propagate_down: false
   propagate_down: false
 }
 layer {
@@ -977,7 +977,7 @@ layer {
   bottom: "scaled_flow_gt"
   bottom: "predict_flow4"
   top: "blob34"
-  propagate_down: false 
+  propagate_down: false
   propagate_down: false
 }
 layer {
@@ -1095,7 +1095,7 @@ layer {
   bottom: "scaled_flow_gt"
   bottom: "predict_flow3"
   top: "blob39"
-  propagate_down: false 
+  propagate_down: false
   propagate_down: false
 }
 layer {
@@ -1213,7 +1213,7 @@ layer {
   bottom: "scaled_flow_gt"
   bottom: "predict_flow2"
   top: "blob44"
-  propagate_down: false 
+  propagate_down: false
   propagate_down: false
 }
 layer {
@@ -1262,4 +1262,3 @@ layer {
   type: "Silence"
   bottom: "blob45"
 }
-

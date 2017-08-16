@@ -66,7 +66,7 @@ flags.DEFINE_integer('log_every_n_steps', 100,
 flags.DEFINE_integer('trace_every_n_steps', 1000,
                      'Logging interval for trace.')
 
-flags.DEFINE_integer('max_steps', 1000000,
+flags.DEFINE_integer('max_steps', 1500000,
                      'Number of training steps.')
 
 
@@ -95,7 +95,7 @@ def main(_):
 
     with tf.Graph().as_default():
 
-        imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir)
+        imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir, True)
 
         # img summary after loading
         flownet.image_summary(imgs_0, imgs_1, "A_input", flows)
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--logdir',
         type=str,
-        default='log_fn_s_again',
+        default='log_15Mio',
         help='Directory where to write event logs and checkpoints'
     )
     parser.add_argument(
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     FLAGS.imgsummary = args.imgsummary
 
     if parser.parse_args().weights_reg != 0:
-	FLAGS.weights_reg = slim.l2_regularizer(args.weights_reg)
+        FLAGS.weights_reg = slim.l2_regularizer(args.weights_reg)
     else:
     	FLAGS.weights_reg = None
     FLAGS.augmentation = args.augmentation
