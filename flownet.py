@@ -196,34 +196,39 @@ def bil_solv_var(img, flow, confidence, flow_gt):
 	def _bil_solv_2(img, flow, conf, flow_gt):
 		"""bilateral solver"""
 
-		directory = FLAGS.logdir + FLAGS.dataset
-		if not os.path.exists(directory):
-			os.makedirs(directory)
-		#conf = np.array(conf*255, np.uint16)
-
 		solved_flow = bills.flow_solver_flo_var(img, flow, conf,
 										ast.literal_eval(FLAGS.grid_params), ast.literal_eval(FLAGS.bs_params))
 
-		# FlowNet flow image
-		imsave(directory + "/img_" + "%04d.png" % FLAGS.flow_int, img)
-		img = computeColor.computeImg(flow)
-		b,g,r = cv2.split(img)
-		img = cv2.merge((r,g,b))
-		print(directory + "/flow_" + "%04d.png" % FLAGS.flow_int)
-		imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, img)
+		if FLAGS.write_flows:
+			directory = FLAGS.logdir + FLAGS.dataset
+			if not os.path.exists(directory):
+				os.makedirs(directory)
+
+			print("Writing:", directory + "/flow_" + "%04d.png" % FLAGS.flow_int)
+			# save img
+			imsave(directory + "/img_" + "%04d.png" % FLAGS.flow_int, img)
+
+			# save flow img and .flo file
+			flow_img = computeColor.computeImg(flow)
+			b,g,r = cv2.split(flow_img)
+			flow_img = cv2.merge((r,g,b))
+
+			imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, flow_img)
+			writeFlowFile.write(flow, directory + "/flow_" + "%04d.flo" % FLAGS.flow_int)
+
+			# save solved flow image
+			"""img = computeColor.computeImg(solved_flow)
+			b,g,r = cv2.split(img)
+			img = cv2.merge((r,g,b))
+			imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
+			writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
+			"""
+
+			# save confidence image + ground truth .flo
+			imsave(directory + "/confidence_" + "%04d.png" % FLAGS.flow_int, conf)
+			writeFlowFile.write(flow_gt, directory + "/flow_gt_" + "%04d.flo" % FLAGS.flow_int)
 
 
-		# solved flow image
-		"""img = computeColor.computeImg(solved_flow)
-		b,g,r = cv2.split(img)
-		img = cv2.merge((r,g,b))
-		imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
-		"""
-
-		imsave(directory + "/confidence_" + "%04d.png" % FLAGS.flow_int, conf)
-		writeFlowFile.write(flow, directory + "/flow_" + "%04d.flo" % FLAGS.flow_int)
-		writeFlowFile.write(flow_gt, directory + "/flow_gt_" + "%04d.flo" % FLAGS.flow_int)
-		#writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
 		if FLAGS.flow_int == FLAGS.testsize:
 		    FLAGS.flow_int = 1
 		else:

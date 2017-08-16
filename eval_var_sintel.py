@@ -37,12 +37,15 @@ flags.DEFINE_string('grid_params', "{ 'sigma_luma' : 2,'sigma_chroma': 4, 'sigma
 flags.DEFINE_string('bs_params', "{'lam': 30, 'A_diag_min': 1e-5, 'cg_tol': 1e-5, 'cg_maxiter': 25}",
                     'bs_params')
 
-flags.DEFINE_integer('batchsize', 20, 'Batch size for eval loop.')
+flags.DEFINE_boolean('write_flows', False,
+                    'Write confidence, .flo and img files')
+
+flags.DEFINE_integer('batchsize', 20, 'Number of iamges used for confidence / mean')
 
 flags.DEFINE_integer('eval_interval_secs', 300,
                      'How many seconds between executions of the eval loop.')
 
-flags.DEFINE_integer('testsize', 1041,
+flags.DEFINE_integer('testsize', 1041, #1041
                      'Number of test samples')
 
 flags.DEFINE_integer('record_bytes', 3571724, 'Size of .flo bytes')
@@ -79,18 +82,19 @@ def slice_vector(vec, size):
 	y = tf.slice(vec,[0, 0, 0, 1], [size] + FLAGS.img_shape[:2] + [1])
 	return tf.squeeze(x), tf.squeeze(y)
 
-def aee_f(flows, calc_flows, size):
-    square = tf.square(flows - calc_flows)
+def aee_f(gt, calc_flows, size):
+    "average end point error"
+    square = tf.square(gt - calc_flows)
     x , y = slice_vector(square, size)
     sqr = tf.sqrt(tf.add(x, y))
     aee = tf.metrics.mean(sqr)
     return aee
 
-def var_mean_2(flow_to_mean):
-    """Pyfunc wrapper for the bilateral solver"""
+def var_mean(flow_to_mean):
+    """Pyfunc wrapper for the confidence / mean calculation"""
 
-    def _var_mean_2(flow_to_mean):
-        """bilateral solver"""
+    def _var_mean(flow_to_mean):
+        """ confidence / mean calculation"""
         flow_to_mean = np.array(flow_to_mean)
         x = flow_to_mean[:,:,:,0]
         y = flow_to_mean[:,:,:,1]
@@ -99,16 +103,16 @@ def var_mean_2(flow_to_mean):
         #var_mea = np.mean(np.array([var_x, var_y]), 0)
         var_mea = (var_x + var_y)/2
         # TODO check /2, /8 here ...
+        # exp to get values from (0, 1) of varianz
         var_mea = np.exp(-1*np.array(var_mea, np.float32)/8)
-        print(np.amax(var_mea), np.amin(var_mea))
-        # normalize
-        #print(np.amax(var_mea), np.amin(var_mea))
-        #print(np.amax(var_mea), np.amin(var_mea))
+
         flow_x_m = np.mean(x, 0)
         flow_y_m = np.mean(y, 0)
         flow_to_mean = np.zeros(list(FLAGS.flow_shape), np.float32)
         flow_to_mean[:,:,0] = flow_x_m
         flow_to_mean[:,:,1] = flow_y_m
+
+        # images for summary
         var_img = np.zeros(list(FLAGS.img_shape), np.float32)
         var_img[:,:,0] = var_mea
         var_img[:,:,1] = var_mea
@@ -126,7 +130,7 @@ def var_mean_2(flow_to_mean):
     return mean, var, var_img
 
 def main(_):
-    """Evaluate FlowNet for test set"""
+    """Evaluate FlowNet for Sintel test set"""
 
     with tf.Graph().as_default():
         # Generate tensors from numpy images and flows.
@@ -147,23 +151,28 @@ def main(_):
 
         # Get flow tensor from flownet model
         calc_flows = architectures.flownet_dropout(imgs_0, imgs_1, flows)
-        
+
         flow_mean, confidence, conf_img  = var_mean_2(calc_flows)
 
         #confidence = tf.image.convert_image_dtype(confidence, tf.uint16)
         # calc EPE / AEE = ((x1-x2)^2 + (y1-y2)^2)^1/2
         # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3478865/
 
-        aee = aee_f(flow, flow_mean, var_num)
         # bilateral solver
         img_0 = tf.squeeze(tf.stack(img_0))
-        flow_s = tf.squeeze(tf.stack(flow))
-        solved_flow = flownet.bil_solv_var(img_0, flow_mean, confidence, flow_s)
+        FLAGS.write_flows = True
+        solved_flow = flownet.bil_solv_var(img_0, flow_mean, confidence)
         aee_bs = aee_f(flow, solved_flow, var_num)
+
+        FLAGS.write_flows = False
+        confidence = (2**16)-1
+        solved_flow_c1 = flownet.bil_solv_var(img_0, flow_mean, confidence, flow_s)
+        aee_bs_c1 = aee_f(flow, solved_flow, var_num)
 
         metrics_to_values, metrics_to_updates = slim.metrics.aggregate_metric_map({
           	      "AEE": slim.metrics.streaming_mean(aee),
                   "AEE_BS": slim.metrics.streaming_mean(aee_bs),
+                  "AEE_BS_No_Confidence": slim.metrics.streaming_mean(aee_bs_c1),
         })
 
         for name, value in metrics_to_values.iteritems():

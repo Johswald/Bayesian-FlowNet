@@ -37,6 +37,9 @@ flags.DEFINE_string('grid_params', "{ 'sigma_luma' : 2,'sigma_chroma': 4, 'sigma
 flags.DEFINE_string('bs_params', "{'lam': 30, 'A_diag_min': 1e-5, 'cg_tol': 1e-5, 'cg_maxiter': 25}",
                     "Bilateral solver parameters")
 
+flags.DEFINE_boolean('write_flows', False,
+                    'Write confidence, .flo and img files')
+
 flags.DEFINE_integer('batchsize', 20, 'Batch size for eval loop.')
 
 flags.DEFINE_integer('eval_interval_secs', 300,
@@ -90,10 +93,10 @@ def aee_f(flow_2d, flow_3d, flow_mean):
     return tf.py_func( _aee_f, [flow_2d, flow_3d, flow_mean], [tf.float32], name='flow_aae')
 
 def var_mean(flow_to_mean):
-    """Pyfunc wrapper for confidence and mean calculation"""
+    """Pyfunc wrapper for the confidence / mean calculation"""
 
     def _var_mean(flow_to_mean):
-        """Calculation of mean and var from stack of flows"""
+        """ confidence / mean calculation"""
         flow_to_mean = np.array(flow_to_mean)
         x = flow_to_mean[:,:,:,0]
         y = flow_to_mean[:,:,:,1]
@@ -128,7 +131,7 @@ def var_mean(flow_to_mean):
     return mean, var, var_img
 
 def main(_):
-    """Evaluate FlowNet for test set"""
+    """Evaluate FlowNet for Kitti 2012 test set"""
 
     with tf.Graph().as_default():
         # Generate tensors from numpy images and flows.
@@ -154,16 +157,23 @@ def main(_):
         # calc EPE / AEE = ((x1-x2)^2 + (y1-y2)^2)^1/2
         # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3478865/
         aee = aee_f(flow_2D, flow, flow_mean)
-        # bilateral solver
+        # bilateral solverc
         img_0 = tf.squeeze(tf.stack(img_0))
-        flow_2D_s = tf.squeeze(tf.stack(flow_2D))
-        solved_flow = flownet.bil_solv_var(img_0, flow_mean, confidence, flow_2D_s)
-        aee_bs = aee_f(flow_2D, flow, solved_flow)
+        FLAGS.write_flows = True
+        solved_flow = flownet.bil_solv_var(img_0, flow_mean, confidence)
+        aee_bs = aee_f(flow, solved_flow, var_num)
+
+        FLAGS.write_flows = False
+        confidence = (2**16)-1
+        solved_flow_c1 = flownet.bil_solv_var(img_0, flow_mean, confidence, flow_s)
+        aee_bs_c1 = aee_f(flow, solved_flow, var_num)
 
         metrics_to_values, metrics_to_updates = slim.metrics.aggregate_metric_map({
           	      "AEE": slim.metrics.streaming_mean(aee),
                   "AEE_BS": slim.metrics.streaming_mean(aee_bs),
+                  "AEE_BS_No_Confidence": slim.metrics.streaming_mean(aee_bs_c1),
         })
+
 
         for name, value in metrics_to_values.iteritems():
             		tf.summary.scalar(name, value)
