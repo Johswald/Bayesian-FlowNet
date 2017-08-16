@@ -1,4 +1,4 @@
-# FlowNet in Tensorflow
+# FlowNetS in Tensorflow
 
 [FlowNetS](https://lmb.informatik.uni-freiburg.de/Publications/2015/DFIB15/flownet.pdf) 
 implementation in Tensorflow.
