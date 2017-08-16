@@ -1,19 +1,22 @@
 """
 Definitions and utilities for the flownet model
-
 This file contains functions for data augmentation, summary and training ops for tensorflow training
-
 """
 
+import os
 import cv2
 import numpy as np
 import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
+import ast
 
 import computeColor
-import readFlowFile
+import bilateral_solver_var as bills
+import writeFlowFile
+
+from skimage.io import imread, imsave
 
 FLAGS = flags.FLAGS
 
@@ -36,7 +39,7 @@ def affine_augm(imgs_0, imgs_1, flows):
 			aug_0 = cv2.warpAffine(img_0, mat_i, (w, h), borderMode=3)
 			aug_1 = cv2.warpAffine(img_1, mat_i, (w, h), borderMode=3)
 			aug_f = cv2.warpAffine(flow, mat_i, (w, h), borderMode=3)
-			if np.random.rand() > 0.5:
+			if np.random.rand() > 0.75:
 				aug_0 = cv2.GaussianBlur(aug_0, (7, 7), -1)
 				aug_1 = cv2.GaussianBlur(aug_1, (7, 7), -1)
 				aug_f = cv2.GaussianBlur(aug_f, (7, 7), -1)
@@ -90,7 +93,6 @@ def chromatic_augm(imgs_0, imgs_1):
 
 	# Image / Flow Summary
 	# image_summary(chroI_0, chroI_1, "D_chrom", None)
-
 	return chroI_0, chroI_1
 
 def rotation_crop(imgs_0, imgs_1, flows):
@@ -162,7 +164,6 @@ def rotation_crop(imgs_0, imgs_1, flows):
 	rotI_0 = tf.image.crop_and_resize(imgs_0, boxes, box_ind, crop_size)
 	rotI_1 = tf.image.crop_and_resize(imgs_1, boxes, box_ind, crop_size)
 	rotF = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
-
 	# Image / Flow Summary
 	# image_summary(rotI_0, rotI_1, "C_rotation", rotF)
 	return rotI_0, rotI_1, rotF
@@ -189,6 +190,54 @@ def flows_to_img(flows):
 	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.img_shape)
 	return flow_imgs
 
+def bil_solv_var(img, flow, confidence, flow_gt):
+	"""Pyfunc wrapper for the bilateral solver"""
+
+	def _bil_solv_2(img, flow, conf, flow_gt):
+		"""bilateral solver"""
+
+		directory = FLAGS.logdir + FLAGS.dataset
+		if not os.path.exists(directory):
+			os.makedirs(directory)
+		#conf = np.array(conf*255, np.uint16)
+
+		solved_flow = bills.flow_solver_flo_var(img, flow, conf,
+										ast.literal_eval(FLAGS.grid_params), ast.literal_eval(FLAGS.bs_params))
+
+		# FlowNet flow image
+		imsave(directory + "/img_" + "%04d.png" % FLAGS.flow_int, img)
+		img = computeColor.computeImg(flow)
+		b,g,r = cv2.split(img)
+		img = cv2.merge((r,g,b))
+		print(directory + "/flow_" + "%04d.png" % FLAGS.flow_int)
+		imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, img)
+
+
+		# solved flow image
+		"""img = computeColor.computeImg(solved_flow)
+		b,g,r = cv2.split(img)
+		img = cv2.merge((r,g,b))
+		imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
+		"""
+
+		imsave(directory + "/confidence_" + "%04d.png" % FLAGS.flow_int, conf)
+		writeFlowFile.write(flow, directory + "/flow_" + "%04d.flo" % FLAGS.flow_int)
+		writeFlowFile.write(flow_gt, directory + "/flow_gt_" + "%04d.flo" % FLAGS.flow_int)
+		#writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
+		if FLAGS.flow_int == FLAGS.testsize:
+		    FLAGS.flow_int = 1
+		else:
+		    FLAGS.flow_int += 1
+		return solved_flow
+
+	#print(img, flow, confidence)
+	solved_flow = tf.py_func( _bil_solv_2, [img, flow, confidence, flow_gt],
+							[tf.float32], name='bil_solv')
+	solved_flow = tf.squeeze(tf.stack(solved_flow))
+	solved_flow.set_shape(list(FLAGS.flow_shape))
+
+	return solved_flow
+
 def image_summary(imgs_0, imgs_1, text, flows):
 	""" Write image summary for tensorboard / data augmenation """
 	if FLAGS.imgsummary:
@@ -204,25 +253,8 @@ def create_train_op(global_step):
 
 	slim.model_analyzer.analyze_vars(
 		tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
-        
-	
-	"""
-	linear learning rate, starting at 1e-4, after 300.000 each 100.000 devide by two.
-	to have the similiar learning rate 
-	"""
-	learning_rate = tf.train.polynomial_decay(FLAGS.learning_rate,
-							tf.cast(global_step, tf.int32),
-							FLAGS.max_steps,
-							end_learning_rate=FLAGS.learning_rate/2**8)
-	
-	
-	print(FLAGS.boundaries)
-	print(FLAGS.values)
-	"""learning_rate = tf.train.piecewise_constant(
-							tf.cast(global_step, tf.int32),
-							FLAGS.boundaries,
-							FLAGS.values)
-	"""
+
+	learning_rate = tf.train.piecewise_constant(tf.cast(global_step, tf.int32), FLAGS.boundaries, FLAGS.values, name=None)
 	train_loss = tf.losses.get_total_loss()
 	tf.summary.scalar('Learning_Rate', learning_rate)
 	tf.summary.scalar('Training Loss', train_loss)
