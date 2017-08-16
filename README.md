@@ -1,5 +1,6 @@
 # FlowNet in Tensorflow
 
-TODO:
-1. test data augmentation
-2. fine tuning
+Modified FlowNetS [a link](https://lmb.informatik.uni-freiburg.de/Publications/2015/DFIB15/flownet.pdf) 
+implementation in Tensorflow
+
+
