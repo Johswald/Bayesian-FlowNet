@@ -170,9 +170,9 @@ def get_data_kitti(datadir, shuffle_all, batchs):
 		imgs_1 = tf.image.convert_image_dtype(imgs_1, tf.float32)
 
 		# set shape
-		imgs_0.set_shape(FLAGS.data_shape)
-		imgs_1.set_shape(FLAGS.data_shape)
-		flows.set_shape(FLAGS.data_shape)
+		imgs_0.set_shape(FLAGS.d_shape_img)
+		imgs_1.set_shape(FLAGS.d_shape_img)
+		flows.set_shape(FLAGS.d_shape_img)
 
 		return tf.train.batch([imgs_0, imgs_1, flows],
 		                      batch_size=batchs

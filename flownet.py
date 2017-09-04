@@ -10,7 +10,6 @@ import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
-import ast
 
 import computeColor
 import bilateral_solver_var as bills
@@ -30,7 +29,7 @@ def affine_augm(imgs_0, imgs_1, flows):
 		"""Affine Transformation with cv2 (warpAffine)"""
 
 		bs = FLAGS.batchsize
-		h, w, ch = FLAGS.img_shape
+		h, w, ch = FLAGS.img_net_shape
 		c = np.float32([w, h]) / 2.0
 		mat = np.random.normal(size=[bs, 2, 3])
 		mat[:, :2, :2] = mat[:, :2, :2] * 0.15 + np.eye(2)
@@ -48,13 +47,13 @@ def affine_augm(imgs_0, imgs_1, flows):
 			flows[i] = aug_f
 	 	return [imgs_0, imgs_1, flows]
 
-	shape = FLAGS.img_shape
+	shape = FLAGS.img_net_shape
 	aug_data = tf.py_func( _affine_transform, [imgs_0, imgs_1, flows],
 					[tf.float32, tf.float32, tf.float32], name='affine_transform')
 	augI_0, augI_1, augF = aug_data[:]
-	augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
-	augI_1.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
-	augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_shape))
+	augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_net_shape))
+	augI_1.set_shape([FLAGS.batchsize] + list(FLAGS.img_net_shape))
+	augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_net_shape))
 
 	# Image / Flow Summary
 	#image_summary(augI_0, augI_1, "B_affine", augF)
@@ -105,7 +104,7 @@ def rotation_crop(imgs_0, imgs_1, flows):
 	- scaling from [0.9, 2.0].
 	"""
 	bs = FLAGS.batchsize
-	h, w = FLAGS.img_shape[:2]
+	h, w = FLAGS.img_net_shape[:2]
 
 	#- rotation from [ -17 , 17 ];
 	angles = np.random.uniform(-FLAGS.max_rotate_angle, FLAGS.max_rotate_angle, bs)
@@ -187,19 +186,19 @@ def flows_to_img(flows):
 					 [tf.uint8], stateful = False, name='flow_transform')
 
 	flow_imgs = tf.squeeze(tf.stack(flow_imgs))
-	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.img_shape)
+	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.d_shape_img)
 	return flow_imgs
 
 def bil_solv_var(img, flow, confidence, flow_gt):
 	"""Pyfunc wrapper for the bilateral solver"""
 
-	def _bil_solv_2(img, flow, conf, flow_gt):
+	def _bil_solv(img, flow, conf, flow_gt):
 		"""bilateral solver"""
-
 		solved_flow = bills.flow_solver_flo_var(img, flow, conf,
-										ast.literal_eval(FLAGS.grid_params), ast.literal_eval(FLAGS.bs_params))
+										FLAGS.grid_params, FLAGS.bs_params)
 
-		if FLAGS.write_flows:
+
+		if np.min(conf) != 1:
 			directory = FLAGS.logdir + FLAGS.dataset
 			if not os.path.exists(directory):
 				os.makedirs(directory)
@@ -209,20 +208,19 @@ def bil_solv_var(img, flow, confidence, flow_gt):
 			imsave(directory + "/img_" + "%04d.png" % FLAGS.flow_int, img)
 
 			# save flow img and .flo file
-			flow_img = computeColor.computeImg(flow)
-			b,g,r = cv2.split(flow_img)
-			flow_img = cv2.merge((r,g,b))
+			#flow_img = computeColor.computeImg(flow)
+			#b,g,r = cv2.split(flow_img)
+			#flow_img = cv2.merge((r,g,b))
 
-			imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, flow_img)
+			#imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, flow_img)
 			writeFlowFile.write(flow, directory + "/flow_" + "%04d.flo" % FLAGS.flow_int)
 
 			# save solved flow image
-			"""img = computeColor.computeImg(solved_flow)
-			b,g,r = cv2.split(img)
-			img = cv2.merge((r,g,b))
-			imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
-			writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
-			"""
+			#img = computeColor.computeImg(solved_flow)
+			#b,g,r = cv2.split(img)
+			#img = cv2.merge((r,g,b))
+			#imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
+			#writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
 
 			# save confidence image + ground truth .flo
 			imsave(directory + "/confidence_" + "%04d.png" % FLAGS.flow_int, conf)
@@ -236,10 +234,10 @@ def bil_solv_var(img, flow, confidence, flow_gt):
 		return solved_flow
 
 	#print(img, flow, confidence)
-	solved_flow = tf.py_func( _bil_solv_2, [img, flow, confidence, flow_gt],
+	solved_flow = tf.py_func( _bil_solv, [img, flow, confidence, flow_gt],
 							[tf.float32], name='bil_solv')
 	solved_flow = tf.squeeze(tf.stack(solved_flow))
-	solved_flow.set_shape(list(FLAGS.flow_shape))
+	solved_flow.set_shape(list(FLAGS.d_shape_flow))
 
 	return solved_flow
 

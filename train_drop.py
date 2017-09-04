@@ -27,14 +27,21 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_integer('batchsize', 8, 'Batch size.')
 
-flags.DEFINE_integer('img_shape', [384, 512, 3],
+flags.DEFINE_integer('d_shape_img', [384, 512, 3],
+                           'Data shape: width, height, channels')
+
+flags.DEFINE_integer('d_shape_flow', [384, 512, 2],
+                           'Data shape: width, height, channels')
+
+flags.DEFINE_integer('img_net_shape', [384, 512, 3],
                      'Image shape: width, height, channels')
 
-flags.DEFINE_integer('flow_shape', [384, 512, 2],
+flags.DEFINE_integer('flow_net_shape', [384, 512, 2],
                      'Image shape: width, height, 2')
+
 flags.DEFINE_integer('record_bytes', 1572876,
                            'Flow record bytes reader')
-                           
+
 flags.DEFINE_integer('max_steps', 1500000,
                      'Number of training steps.')
 
