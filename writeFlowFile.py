@@ -1,6 +1,6 @@
 #   write flow file
 
-#   According to the matlab code of Deqing Sun and c++ source code of Daniel Scharstein  
+#   According to the matlab code of Deqing Sun and c++ source code of Daniel Scharstein
 #   Contact: dqsun@cs.brown.edu
 #   Contact: schar@middlebury.edu
 
@@ -8,7 +8,7 @@
 #   Contact: johannes.oswald@tum.de
 #   Date: 26/04/2017
 
-#	For more information, check http://vision.middlebury.edu/flow/ 
+#	For more information, check http://vision.middlebury.edu/flow/
 
 import numpy as np
 import os
@@ -23,7 +23,7 @@ def write(flow, filename):
 	height, width, nBands = flow.shape
 	assert nBands == 2, "Number of bands = %r != 2" % nBands
 	u = flow[: , : , 0]
-	v = flow[: , : , 1]	
+	v = flow[: , : , 1]
 	assert u.shape == v.shape, "Invalid flow shape"
 	height, width = u.shape
 
