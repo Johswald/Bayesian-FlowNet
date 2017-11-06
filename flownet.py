@@ -1,170 +1,340 @@
 """
-Definitions and utilities for the flownet model
+Definitions and utilities for the FlowNet model
 This file contains functions for data augmentation, summary and training ops for tensorflow training
 """
 
 import os
 import cv2
 import numpy as np
+from numpy import linalg as LA
 import math
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.platform import flags
+from tensorflow.contrib.keras.python.keras import backend as K
+import time
 
 import computeColor
-import bilateral_solver_var as bills
+import bilateral_solver as bils
 import writeFlowFile
 
-from skimage.io import imread, imsave
+from skimage.io import imsave
+from PIL import Image
+from PIL.ImageEnhance import *
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float('max_rotate_angle', 0.17,
-						'max rotation angle')
+flags.DEFINE_float('max_rotate_angle', 17.0,
+						'Mxx rotation angle')
 
-def affine_augm(imgs_0, imgs_1, flows):
-	"""Pyfunc wrapper for randomized affine transformations."""
-
-	def _affine_transform(imgs_0, imgs_1, flows):
-		"""Affine Transformation with cv2 (warpAffine)"""
-
-		bs = FLAGS.batchsize
-		h, w, ch = FLAGS.img_net_shape
-		c = np.float32([w, h]) / 2.0
-		mat = np.random.normal(size=[bs, 2, 3])
-		mat[:, :2, :2] = mat[:, :2, :2] * 0.15 + np.eye(2)
-		mat[:, :, 2] = mat[:, :, 2] * 2 + c - mat[:, :2, :2].dot(c)
-		for mat_i, img_0, img_1, flow, i in zip(mat, imgs_0, imgs_1, flows, range(bs)):
-			aug_0 = cv2.warpAffine(img_0, mat_i, (w, h), borderMode=3)
-			aug_1 = cv2.warpAffine(img_1, mat_i, (w, h), borderMode=3)
-			aug_f = cv2.warpAffine(flow, mat_i, (w, h), borderMode=3)
-			if np.random.rand() > 0.75:
-				aug_0 = cv2.GaussianBlur(aug_0, (7, 7), -1)
-				aug_1 = cv2.GaussianBlur(aug_1, (7, 7), -1)
-				aug_f = cv2.GaussianBlur(aug_f, (7, 7), -1)
-			imgs_0[i] = aug_0
-			imgs_1[i] = aug_1
-			flows[i] = aug_f
-	 	return [imgs_0, imgs_1, flows]
-
-	shape = FLAGS.img_net_shape
-	aug_data = tf.py_func( _affine_transform, [imgs_0, imgs_1, flows],
-					[tf.float32, tf.float32, tf.float32], name='affine_transform')
-	augI_0, augI_1, augF = aug_data[:]
-	augI_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_net_shape))
-	augI_1.set_shape([FLAGS.batchsize] + list(FLAGS.img_net_shape))
-	augF.set_shape([FLAGS.batchsize] + list(FLAGS.flow_net_shape))
-
-	# Image / Flow Summary
-	#image_summary(augI_0, augI_1, "B_affine", augF)
-	return augI_0, augI_1, augF
+def adjust_gamma(image, gamma=1.0):
+	# build a lookup table mapping the pixel values [0, 255] to
+	# their adjusted gamma values
+	invGamma = 1.0 / gamma
+	table = np.array([((i / 255.0) ** invGamma) * 255
+		for i in np.arange(0, 256)]).astype("uint8")
+	# apply gamma correction using the lookup table
+	return cv2.LUT(image, table)
 
 def chromatic_augm(imgs_0, imgs_1):
-	"""TODO: Check chromatic data augm examples in the web"""
-	"""chromatic augmentation. (brightness, contrast, gamma, and color)
-	(- The Gaussian noise has a sigma uniformly sampled
-	from [0, 0.04]; Gaussian Blur in Affine Trafo)
+
+	"""chromatic augmentation 1-1 as in paper but slow
+	- The Gaussian noise has a sigma uniformly sampled from [0, 0.04]
 	- contrast is sampled within [-0.8, 0.4];
 	- multiplicative color changes to the RGB channels per image from [0.5, 2];
 	- gamma values from [0.7, 1.5] and
 	- additive brightness changes using Gaussian with a sigma of 0.2.
 	"""
-	bs = FLAGS.batchsize
-	# multiplicative color changes to the RGB channels per image from [0.5, 2];
-	# 1. Own testet replacement with saturation / hue
-	# 2. gamma values from [0.7, 1.5] and
-	# 3. Own testet brightness changes
-	# different transformation in batch
-	hue = np.random.uniform(-1, 1, bs)
-	gamma = np.random.uniform(0.7, 1.5, bs)
-	delta = np.random.uniform(-1 , 1, bs)
-	chroI_0 = tf.stack([tf.image.adjust_brightness(
-						tf.image.adjust_gamma(
-						  tf.image.adjust_hue(
-							img, hue[i]), gamma[i]), delta[i])
-							  for img, i in zip(tf.unstack(imgs_0), range(bs))])
 
-	chroI_1 = tf.stack([tf.image.adjust_brightness(
-						tf.image.adjust_gamma(
-						  tf.image.adjust_hue(
-							img, hue[i]), gamma[i]), delta[i])
-							  for img, i in zip(tf.unstack(imgs_1), range(bs))])
+	def _chromatic(imgs_0, imgs_1):
+		bs = FLAGS.batchsize
+		contrast = np.array([np.random.uniform(0.2, 1.4)
+							for i in range(bs)]).astype(np.float32)
+		color = np.array([np.random.uniform(0.5, 2)
+							for i in range(bs)]).astype(np.float32)
+		gamma = np.array([np.random.uniform(0.7, 1.5)
+							for i in range(bs)]).astype(np.float32)
+		brightness = np.array([np.random.normal(1, 0.2)
+							for i in range(bs)]).astype(np.float32)
+		noise = np.array([np.random.uniform(0, 0.04)
+							for i in range(bs)]).astype(np.float32)
+		for img_0, img_1, i in zip(imgs_0, imgs_1, range(bs)):
+			img_0 = Contrast(Image.fromarray(img_0)).enhance(contrast[i])
+			img_1 = Contrast(Image.fromarray(img_1)).enhance(contrast[i])
+			img_0 = Color(img_0).enhance(color[i])
+			img_1 = Color(img_1).enhance(color[i])
+			img_0 = Brightness(img_0).enhance(brightness[i])
+			img_1 = Brightness(img_1).enhance(brightness[i])
+			img_0 = np.array(img_0, np.uint8)
+			img_1 = np.array(img_1, np.uint8)
+			img_0 = adjust_gamma(img_0, gamma[i]).astype(np.float32)
+			img_1 = adjust_gamma(img_1, gamma[i]).astype(np.float32)
+			gaussian_noise = np.random.normal(0, noise[i], img_0.shape)*255.0
+			imgs_0[i] = np.maximum(0, np.minimum(img_0 + gaussian_noise, 255.0))
+			imgs_1[i] = np.maximum(0, np.minimum(img_1 + gaussian_noise, 255.0))
+		return [imgs_0.astype(np.float32), imgs_1.astype(np.float32)]
+
+	chromatic_data = tf.py_func( _chromatic, [imgs_0, imgs_1],
+			[tf.float32, tf.float32], name='chromatic_augm')
+	imgs_0, imgs_1 = chromatic_data[:]
+	imgs_0.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
+	imgs_1.set_shape([FLAGS.batchsize] + list(FLAGS.img_shape))
+	return imgs_0, imgs_1
+
+def fast_chromatic_augm(imgs_0, imgs_1):
+	"""fast chromatic augmentation - not 1-1 to paper"""
+
+	bs = FLAGS.batchsize
+
+	def _get_randoms(bs):
+		""" get random numbers for chromatic aug"""
+		hue = np.random.uniform(-0.3, 0.3, bs).astype(np.float32)
+		bright = np.random.uniform(- 26. / 255., 26. / 255., bs).astype(np.float32)
+		satur = np.random.uniform(0.7, 1.3, bs).astype(np.float32)
+		cont = np.random.uniform(0.7, 1.3, bs).astype(np.float32)
+		return [hue, bright, satur, cont]
+
+	hue, bright, satur, cont  = tf.py_func( _get_randoms,
+			[bs], [tf.float32, tf.float32, tf.float32, tf.float32], name='get_randoms')[:]
+
+	hue = tf.stack(hue)
+	hue.set_shape([bs])
+
+	satur = tf.stack(satur)
+	satur.set_shape([bs])
+
+	cont = tf.stack(cont)
+	cont.set_shape([bs])
+
+	bright = tf.stack(bright)
+	bright.set_shape([bs])
+
+
+	imgs_0 = tf.stack([tf.image.adjust_hue(
+					   tf.image.adjust_saturation(
+					   tf.image.adjust_contrast(
+					   tf.image.adjust_brightness(
+							img, h), s), c), b)
+							  for img, h, s, c, b  in zip(tf.unstack(imgs_0),
+							  							tf.unstack(hue),
+												 		tf.unstack(satur),
+												  		tf.unstack(cont),
+												  		tf.unstack(bright))])
+
+	imgs_1 = tf.stack([tf.image.adjust_hue(
+					   tf.image.adjust_saturation(
+					   tf.image.adjust_contrast(
+					   tf.image.adjust_brightness(
+							img, h), s), c), b)
+							  for img, h, s, c, b  in zip(tf.unstack(imgs_1),
+							  							tf.unstack(hue),
+												 		tf.unstack(satur),
+												  		tf.unstack(cont),
+												  		tf.unstack(bright))])
+
 
 	# Image / Flow Summary
-	# image_summary(chroI_0, chroI_1, "D_chrom", None)
-	return chroI_0, chroI_1
+	# image_summary(imgs_0, imgs_1, "D_chrom", None)
+	return imgs_0, imgs_1
 
-def rotation_crop(imgs_0, imgs_1, flows):
-	# pretty ugly (TODO: check cv2 warp affine rotate)
-	"""image rotation/scaling.
-	Specifically we sample
-	- translation from a the range [ 20%, 20%]
-	of the image width for x and y;
-	- rotation from [ -17 , 17 ];
-	- scaling from [0.9, 2.0].
+def warp(imgs_0, imgs_1, flows, name):
+	""" warp image for given flow - augmentation testing
 	"""
-	bs = FLAGS.batchsize
-	h, w = FLAGS.img_net_shape[:2]
 
-	#- rotation from [ -17 , 17 ];
-	angles = np.random.uniform(-FLAGS.max_rotate_angle, FLAGS.max_rotate_angle, bs)
-	imgs_0 = tf.contrib.image.rotate(imgs_0, angles)
-	imgs_1 = tf.contrib.image.rotate(imgs_1, angles)
-	flows = tf.contrib.image.rotate(flows, angles)
-	# check available area to crop out image according to random rotation
-	diff = w-h
-	hw_ratio = float(h)/w
-	#tf.summary.image("Rotation_", imgs_0, 4)
-	scales = []
-	boxes = []
-	# rotate image and crop out black borders
-	# http://stackoverflow.com/questions/16702966/rotate-image-and-crop-out-black-borders
-	for ang in angles:
-		quadrant = int(math.floor(ang / (math.pi / 2))) & 3
-		sign_alpha = ang if ((quadrant & 1) == 0) else math.pi - ang
-		alpha = (sign_alpha % math.pi + math.pi) % math.pi
-		bb_w = w * math.cos(alpha) + h * math.sin(alpha)
-		bb_h = w * math.sin(alpha) + h * math.cos(alpha)
-		gamma = math.atan2(bb_w, bb_w) if (w < h) else math.atan2(bb_w, bb_w)
-		delta = math.pi - alpha - gamma
-		length = h if (w < h) else w
-		d = length * math.cos(alpha)
-		a = d * math.sin(alpha) / math.sin(delta)
-		y = a * math.cos(gamma)
-		x = y * math.tan(gamma)
-		max_width = bb_w - 2 * x
-		max_height =bb_h - 2 * y
-		# these are the maximum widths/ heights given the rotation from angle ang
-		# normalized coordinates
-		scale = max_width/w
-		x1 = (1 - scale)/2
-		x2 = 1 - x1
-		y1 = (1 - scale)/2
-		y2 = 1 - y1
-		scales.append(scale)
-		# if rotation forces scale to be already bigger than 2 do nothing (Never happening here)
-		if scale <= 0.5:
-			boxes.append([x1, y1, x2, y2])
-		else:
-			# random choose scale smaller than 2 and
-			# random choose box to crop from the window given by roation -> random translation
-			# new scale has to big enough to cut rotation error out
-			new_scale = np.random.uniform(0.5, scale)
-			new_width = w*new_scale
-			new_height = h*new_scale
-			x1_s = x1 + np.random.uniform(0, 1- new_width/max_width)
-			x2_s = min(x1_s + new_width/w, x2)
-			y1_s = y1 + np.random.uniform(0, 1- new_height/max_height)
-			y2_s =  min(y1_s + new_height/h, y2)
-			boxes.append([x1_s, y1_s, x2_s, y2_s])
+	def _warp(imgs_0, imgs_1, flows):
+		""" warp image"""
+		_, h, w, _ = imgs_0.shape
+		for img0, img1, flow, i in zip(imgs_0, imgs_1, flows, range(FLAGS.batchsize)):
+			new = np.zeros(img0.shape)
+			flow_x = flow[:, :, 0]
+			flow_y = flow[:, :, 1]
+			for x in range(w):
+				for y in range(h):
+					new_x = int(x + flow_x[y, x])
+					new_y = int(y + flow_y[y, x])
+					# do not use flow if out of image
+					if not (new_x >= w or new_x < 0 or new_y >= h or new_y < 0):
+						new[new_y, new_x] = img0[y, x]
+
+			imgs_0[i] = new
+		return imgs_0
+
+	bs = FLAGS.batchsize
+	warped_imgs = tf.py_func( _warp, [imgs_0, imgs_1, flows],
+			tf.float32, name='warp')
+	warped_imgs = tf.stack(warped_imgs)
+	warped_imgs.set_shape([bs] + list(FLAGS.img_shape))
+
+	tf.summary.image("image_0" + name, imgs_0, FLAGS.img_summary_num)
+	tf.summary.image("warped_0_to_1" + name, warped_imgs, FLAGS.img_summary_num)
+	tf.summary.image("image_1" + name, imgs_1, FLAGS.img_summary_num)
+
+def rotation_crop_trans(rotI_0, rotI_1, rotF):
+	"""image rotation/scaling - pretty hacky rotation, crop, translate
+	Specifically we sample
+	- rotation from [ -17 , 17 ];
+	- translation from a the range [20%, 20%] of the image still available after rot;
+	- scaling maximum 2.
+	"""
+
+	def _flip(rotI_0, rotI_1, rotF):
+
+		for img0, img1, flow, i  in zip(rotI_0, rotI_1, rotF, range(bs)):
+			# with 50% change we flip horizontally / vertically
+			# we also have to flip flow pointers as well
+			# horizontal
+			if np.random.uniform(0,1) > 0.5:
+				img0 = cv2.flip(img0, 0)
+				img1 = cv2.flip(img1, 0)
+				flow = cv2.flip(flow, 0)
+				flow[:, :, 1] = flow[:, :, 1]*-1
+
+			# vertical
+			if np.random.uniform(1, 2) > 1.5:
+				img0 = cv2.flip(img0, 1)
+				img1 = cv2.flip(img1, 1)
+				flow = cv2.flip(flow, 1)
+				flow[:, :, 0] = flow[:, :, 0]*-1
+
+			rotI_0[i] = img0
+			rotI_1[i] = img1
+			rotF[i] = flow
+
+		return [rotI_0, rotI_1, rotF]
+
+	def _randomize_rotcroptrans(rotF):
+
+		bs = FLAGS.batchsize
+		h, w = FLAGS.img_shape[:2]
+
+		#- rotation from [ -17 , 17 ];
+
+		angles = np.random.uniform(-FLAGS.max_rotate_angle,
+									FLAGS.max_rotate_angle, bs).astype(np.float32)* np.pi / 180.0
+
+		# after that we randomly choose a new scale between this minimum and
+		# a 50% maximum scale of original image
+		# than we randomly choose to boxes to crop with tensorflow this new scale
+		boxes_0 = []
+		boxes_1 = []
+
+		for flow, ang, i in zip(rotF, angles, range(bs)):
+
+			############################
+			# CROP BOXES + TRANSLATION
+			############################
+
+			# after we rotated images, flows we check available image size ( no black corners)
+			# after that we randomly choose a new scale between this minimum and maximum
+			# scale 50% of original image
+			# than we randomly choose to boxes to crop with this new scale
+			angle1_rad = np.pi/2 - np.abs(ang%np.pi - np.pi/2)
+			c1 = np.cos(angle1_rad)
+			s1 = np.sin(angle1_rad)
+			c_diag = h/np.sqrt(h*h+w*w)
+			s_diag = w/np.sqrt(h*h+w*w)
+			# minimum scale
+			# this is somehow not enough, we add 0.1
+			# when testet on 17degree, there was always a small black corner <- rounding error?
+			# angle 17 -> 0.085 fix or angle 8 -> 0.04 fix seems to work (half os dec. degree)
+			scale = c_diag/(c1*c_diag+s1*s_diag) - (abs(ang) / np.pi * 180.0) / 200
+
+			# 1. random choose scale smaller than 2 - we choose less
+			# 2. random choose 2 box to crop from the window given by roation -> random translation
+			new_scale = np.random.uniform(scale - 0.2, scale)
+			min_c = (1 - scale) / 2.
+			max_c = (1 - new_scale) / 2.
+
+			x1_0 = np.random.uniform(min_c, max_c)
+			x1_1 = np.random.uniform(min_c, max_c)
+			x2_0 = x1_0 + new_scale
+			x2_1 = x1_1 + new_scale
+
+			y1_0 = np.random.uniform(min_c, max_c)
+			y1_1 = np.random.uniform(min_c, max_c)
+			y2_0 = y1_0 + new_scale
+			y2_1 = y1_1 + new_scale
+
+			boxes_0.append([y1_0, x1_0, y2_0, x2_0])
+			boxes_1.append([y1_1, x1_1, y2_1, x2_1])
+
+			x = flow[:, :, 0]
+			y = flow[:, :, 1]
+			# rotate x, y flow pointers
+			x = np.multiply(x, np.cos(ang)) + np.multiply(y, np.sin(ang))
+			y = np.multiply(x, -np.sin(ang)) + np.multiply(y, np.cos(ang))
+
+			# scale flow pointers
+			x *= (1/new_scale)
+			y *= (1/new_scale)
+
+			# (scaled) translation
+			flow[:, :, 0] = x + (x1_0 - x1_1)*w / new_scale
+			flow[:, :, 1] = y + (y1_0 - y1_1)*h / new_scale
+
+			rotF[i] = flow
+
+		boxes_0 = np.array(boxes_0, np.float32)
+		boxes_1 = np.array(boxes_1, np.float32)
+		return [rotF, angles, boxes_0, boxes_1]
+
+	bs = FLAGS.batchsize
+	h, w = FLAGS.img_shape[:2]
+
+	rotF, angles, boxes_0, boxes_1  = tf.py_func( _randomize_rotcroptrans,
+			[rotF], [tf.float32, tf.float32, tf.float32, tf.float32], name='rotcroptrans')[:]
+
+	rotF = tf.stack(rotF)
+	rotF.set_shape([bs] + list(FLAGS.flow_shape))
+
+	angles = tf.stack(angles)
+	angles.set_shape([bs])
+
+	boxes_0 = tf.stack(boxes_0)
+	boxes_0.set_shape([bs, 4])
+
+	boxes_1 = tf.stack(boxes_1)
+	boxes_1.set_shape([bs, 4])
+
+	##############
+	#   APPLY
+	##############
+
+	# rotate all images and flow "picture"
+	# tensorflow doesnt allow to choose bilinear here?
+	rotI_0 = tf.contrib.image.rotate(rotI_0, angles)
+	rotI_1 = tf.contrib.image.rotate(rotI_1, angles)
+	rotF = tf.contrib.image.rotate(rotF, angles)
 
 	crop_size = [h, w]
 	box_ind = [i for i in range(bs)]
-	rotI_0 = tf.image.crop_and_resize(imgs_0, boxes, box_ind, crop_size)
-	rotI_1 = tf.image.crop_and_resize(imgs_1, boxes, box_ind, crop_size)
-	rotF = tf.image.crop_and_resize(flows, boxes, box_ind, crop_size)
-	# Image / Flow Summary
-	# image_summary(rotI_0, rotI_1, "C_rotation", rotF)
+
+	# bilinear is default
+	rotI_0 = tf.image.crop_and_resize(rotI_0, boxes_0, box_ind, crop_size)
+	rotI_1 = tf.image.crop_and_resize(rotI_1, boxes_1, box_ind, crop_size)
+	rotF = tf.image.crop_and_resize(rotF, boxes_0, box_ind, crop_size)
+
+	############################
+	# FLIP IMGs + FLOW
+	############################
+
+	"""
+	rotI_0, rotI_1, rotF  = tf.py_func( _flip, [rotI_0, rotI_1, rotF],
+			[tf.float32,tf.float32, tf.float32], name='flip')[:]
+
+	rotI_0 = tf.stack(rotI_0)
+	rotI_0.set_shape([bs] + list(FLAGS.img_shape))
+
+	rotI_1 = tf.stack(rotI_1)
+	rotI_1.set_shape([bs] + list(FLAGS.img_shape))
+
+	rotF = tf.stack(rotF)
+	rotF.set_shape([bs] + list(FLAGS.flow_shape))
+	"""
+
+	# Check data augmentation
+	# warp(rotI_0, rotI_1, rotF, "_rotF")
+
 	return rotI_0, rotI_1, rotF
 
 def flows_to_img(flows):
@@ -189,52 +359,18 @@ def flows_to_img(flows):
 	flow_imgs.set_shape([FLAGS.batchsize] + FLAGS.d_shape_img)
 	return flow_imgs
 
-def bil_solv_var(img, flow, confidence, flow_gt):
-	"""Pyfunc wrapper for the bilateral solver"""
+def bil_solv_var(img, flow, conf_x, conf_y, flow_gt):
+	""" Pyfunc wrapper for the bilateral solver"""
 
-	def _bil_solv(img, flow, conf, flow_gt):
-		"""bilateral solver"""
-		solved_flow = bills.flow_solver_flo_var(img, flow, conf,
+	def _bil_solv(img, flow, conf_x, conf_y, flow_gt):
+		""" bilateral solver """
+
+		solved_flow = bils.bil_solv_flo(img, flow, conf_x, conf_y,
 										FLAGS.grid_params, FLAGS.bs_params)
 
-
-		if np.min(conf) != 1:
-			directory = FLAGS.logdir + FLAGS.dataset
-			if not os.path.exists(directory):
-				os.makedirs(directory)
-
-			print("Writing:", directory + "/flow_" + "%04d.png" % FLAGS.flow_int)
-			# save img
-			imsave(directory + "/img_" + "%04d.png" % FLAGS.flow_int, img)
-
-			# save flow img and .flo file
-			#flow_img = computeColor.computeImg(flow)
-			#b,g,r = cv2.split(flow_img)
-			#flow_img = cv2.merge((r,g,b))
-
-			#imsave(directory + "/flow_" + "%04d.png" % FLAGS.flow_int, flow_img)
-			writeFlowFile.write(flow, directory + "/flow_" + "%04d.flo" % FLAGS.flow_int)
-
-			# save solved flow image
-			#img = computeColor.computeImg(solved_flow)
-			#b,g,r = cv2.split(img)
-			#img = cv2.merge((r,g,b))
-			#imsave(directory + "/flow_solved_" + "%04d.png" % FLAGS.flow_int, img)
-			#writeFlowFile.write(solved_flow, directory + "/flow_solved_" + "%03d.flo" % FLAGS.flow_int)
-
-			# save confidence image + ground truth .flo
-			imsave(directory + "/confidence_" + "%04d.png" % FLAGS.flow_int, conf)
-			writeFlowFile.write(flow_gt, directory + "/flow_gt_" + "%04d.flo" % FLAGS.flow_int)
-
-
-		if FLAGS.flow_int == FLAGS.testsize:
-		    FLAGS.flow_int = 1
-		else:
-		    FLAGS.flow_int += 1
 		return solved_flow
 
-	#print(img, flow, confidence)
-	solved_flow = tf.py_func( _bil_solv, [img, flow, confidence, flow_gt],
+	solved_flow = tf.py_func( _bil_solv, [img, flow, conf_x, conf_y, flow_gt],
 							[tf.float32], name='bil_solv')
 	solved_flow = tf.squeeze(tf.stack(solved_flow))
 	solved_flow.set_shape(list(FLAGS.d_shape_flow))
@@ -243,6 +379,7 @@ def bil_solv_var(img, flow, confidence, flow_gt):
 
 def image_summary(imgs_0, imgs_1, text, flows):
 	""" Write image summary for tensorboard / data augmenation """
+
 	if FLAGS.imgsummary:
 		if imgs_0 != None and imgs_1 != None:
 			tf.summary.image(text + "_img_0", imgs_0, FLAGS.img_summary_num)
@@ -252,15 +389,17 @@ def image_summary(imgs_0, imgs_1, text, flows):
 			tf.summary.image(text + "_flow", flow_imgs, FLAGS.img_summary_num)
 
 def create_train_op(global_step):
- 	"""Sets up the training Ops."""
+ 	""" Sets up the training ops. """
 
-	slim.model_analyzer.analyze_vars(
-		tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
+	#slim.model_analyzer.analyze_vars(
+	#	tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), print_info=True)
 
-	learning_rate = tf.train.piecewise_constant(tf.cast(global_step, tf.int32), FLAGS.boundaries, FLAGS.values, name=None)
+	learning_rate = tf.train.piecewise_constant(tf.cast(global_step, tf.int32), FLAGS.boundaries,
+												FLAGS.values, name=None)
 	train_loss = tf.losses.get_total_loss()
+
 	tf.summary.scalar('Learning_Rate', learning_rate)
-	tf.summary.scalar('Training Loss', train_loss)
+	tf.summary.scalar('Training L1 Loss', train_loss)
 
 	trainer = tf.train.AdamOptimizer(learning_rate)
 	train_op = slim.learning.create_train_op(train_loss, trainer)
