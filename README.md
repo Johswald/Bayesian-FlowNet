@@ -26,7 +26,7 @@ training files (note .jpg). To incorporate dropout layers, simply
 Check standart hyperparameters in train.py, note that the results are sensitive to the "amount" of data augmentation you use. 
 Training loss looks somthing like: 
 
-![alt text](https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/l1.png)
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/l1.png" width="200">
 
 ## Data Augmentation
 
