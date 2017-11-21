@@ -67,8 +67,7 @@ Through variances of the minibatches results on the same image but inference on 
 confidence images can be created. Evaluation throughout training on FlyingCharis test set (pink) ad well as 
 Sintel Clean (orange), Sintel Final (gray) and Kitti (blue) training sets .
 
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/chairs_epe.png" width="300">
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/Kitti_Sintel_EPE.png" width="300">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/chairs_epe.png" width="300"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/Kitti_Sintel_EPE.png" width="300">
 ## Evaluation 
 Some training images as well as groundtruth, flow estimation, confidence and error images:
 First image of pair:
@@ -76,13 +75,10 @@ First image of pair:
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0384.png" width="400">
 Groundtruth:
 
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0214.png" width="400">
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0384.png" width="400">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0384.png" width="400">
 Confidence:
 
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0214.png" width="400">
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0384.png" width="400">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0384.png" width="400">
 Error:
 
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_213.png" width="400">
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_383.png" width="400">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_213.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_383.png" width="400">
