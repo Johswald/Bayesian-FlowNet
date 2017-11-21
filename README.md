@@ -79,6 +79,7 @@ Groundtruth images:
 Confidence images:
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/confidence_0384.png" width="400">
+
 Error images (note similiarities/differences to confidence images):
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_213.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/error_383.png" width="400">
