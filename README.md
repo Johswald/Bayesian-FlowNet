@@ -16,12 +16,12 @@ The architecture is trained on the [FlyingChairs](https://lmb.informatik.uni-fre
 
 To get similiar results as reported below, just start training by
 
-  python train.py --datadir /path/to/FlyingChairs/ 
+    python train.py --datadir /path/to/FlyingChairs/ 
   
 where in the folder FlyingChairs/ you have simply have the ~27k numbered -img1.jpg, -img2.jpg, -.flo 
 training files (note .jpg). To incorporate dropout layers, simply 
 
-  python train.py --datadir /path/to/FlyingChairs/ --dropout True
+    python train.py --datadir /path/to/FlyingChairs/ --dropout True
 
 Check standart hyperparameters in train.py, note that the results are sensitive to the "amount" of data augmentation you use. 
 
@@ -45,21 +45,29 @@ through a weighted average in the original caffe version. Here, simple bilinear 
 
 There are evaluation scripts for FlyingChairs, Sintel (clean / final) and Kitti datasets provided, e.g.
 
- python eval_var_flownet_s.py --dropout True/False
+    python eval_var_flownet_s.py --dropout True/False
 
 They either evaluate 
 
-the standart FlowNetS by parameter: --dropout False
+the standart FlowNetS by parameter: 
+
+    --dropout False
 
 or
 
-scaling the weights to fixed weights magnitudes after dropout training (parameters: --dropout True / --is_training False)
+scaling the weights to fixed weights magnitudes after dropout training, parameters: 
+
+    --dropout True / --is_training False
 
 or
 
 by loading one test example and creating a minibatch (of size = FLAGS.batchsize) of the same image  
-and average results of the minibatch, parameters: --dropout True. 
-Through variances of the minibatches results (random dropout -> different thinned models) on the same image but inference on "different" modells, confidence images can be created. 
+and average results of the minibatch, parameters: 
+
+    --dropout True. 
+
+Through variances of the minibatches results on the same image but inference on "different" models, 
+confidence images can be created. 
 
 
 
