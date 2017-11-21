@@ -4,7 +4,7 @@ Tensorflow implementation of optical flow predicting [FlowNetS](https://lmb.info
 by [Alexey Dosovitskiy](http://lmb.informatik.uni-freiburg.de/people/dosovits/) et al.
 
 The network can be equiped with dropout layers to produce confidence images through MC dropout after training, 
-as introduced[here](https://arxiv.org/abs/1506.02158). 
+as introduced [here](https://arxiv.org/abs/1506.02158). 
 The positions of dropout layers are very similiar to other encoder-decoder architectures such as [Bayesian SegNet](https://arxiv.org/pdf/1511.02680) or [Deep Depth From Focus](https://arxiv.org/abs/1704.01085).
 
 The confidence images are then used to improve results (with limited success) through post processing through the [Fast Bilateral Solver](https://arxiv.org/pdf/1511.03296.pdf).
@@ -48,13 +48,6 @@ There are evaluation scripts for FlyingChairs, Sintel (clean / final) and Kitti 
     python eval_var_flownet_s.py --dropout True/False
 
 They either evaluate 
-
-the standart FlowNetS by parameter: 
-
-    --dropout False
-
-or
-
 scaling the weights to fixed weights magnitudes after dropout training, parameters: 
 
     --dropout True / --is_training False
@@ -64,10 +57,12 @@ or
 by loading one test example and creating a minibatch (of size = FLAGS.batchsize) of the same image  
 and average results of the minibatch, parameters: 
 
-    --dropout True. 
+    --dropout True / --is_training True
 
+Note that is_training is falsly named due to simplicity.
 Through variances of the minibatches results on the same image but inference on "different" models, 
 confidence images can be created. 
+Some images, groundtruth, results, confidence images and error images:
 
 
 
