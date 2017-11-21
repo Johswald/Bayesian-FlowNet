@@ -24,6 +24,9 @@ training files (note .jpg). To incorporate dropout layers, simply
     python train.py --datadir /path/to/FlyingChairs/ --dropout True
 
 Check standart hyperparameters in train.py, note that the results are sensitive to the "amount" of data augmentation you use. 
+Training loss looks somthing like: 
+
+![alt text](https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/l1.png)
 
 ## Data Augmentation
 
