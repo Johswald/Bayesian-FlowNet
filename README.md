@@ -3,46 +3,44 @@
 Tensorflow implementation of optical flow predicting [FlowNetS](https://lmb.informatik.uni-freiburg.de/Publications/2015/DFIB15/flownet.pdf) 
 by [Alexey Dosovitskiy](http://lmb.informatik.uni-freiburg.de/people/dosovits/) et al.
 
-The network can be equiped with dropout layers to produce confidence images through MC dropout after training, 
+The network can be equipped with dropout layers to produce confidence images through MC dropout after training, 
 as introduced [here](https://arxiv.org/abs/1506.02158). 
-The positions of dropout layers are very similiar to other encoder-decoder architectures such as [Bayesian SegNet](https://arxiv.org/pdf/1511.02680) or [Deep Depth From Focus](https://arxiv.org/abs/1704.01085).
+The positions of dropout layers are very similar to other encoder-decoder architectures such as [Bayesian SegNet](https://arxiv.org/pdf/1511.02680) or [Deep Depth From Focus](https://arxiv.org/abs/1704.01085).
 
-The confidence images are then used to improve results (with limited success) through post processing through the [Fast Bilateral Solver](https://arxiv.org/pdf/1511.03296.pdf).
+The confidence images are then used to improve results (with limited success) through post-processing through the [Fast Bilateral Solver](https://arxiv.org/pdf/1511.03296.pdf).
 
 
 ## Training
 
 The architecture is trained on the [FlyingChairs](https://lmb.informatik.uni-freiburg.de/resources/datasets/FlyingChairs.en.html) dataset, please feel free to provide a Tensorflow reader of the used .ppm images. To enable fast reading here, the images were first transformed to .jpg.
 
-To get similiar results as reported below, just start training by
+To get similar results as reported below, just start training by
 
     python train.py --datadir /path/to/FlyingChairs/ 
   
-where in the folder FlyingChairs/ you have simply have the ~27k numbered -img1.jpg, -img2.jpg, -.flo 
+and in the folder FlyingChairs/ you have simply have the ~27k numbered -img1.jpg, -img2.jpg, -.flo 
 training files (note .jpg). To incorporate dropout layers, simply 
 
     python train.py --datadir /path/to/FlyingChairs/ --dropout True
 
-Check standart hyperparameters in train.py, note that the results are sensitive to the "amount" of data augmentation you use. 
+Check standard hyperparameters in train.py, note that the results are sensitive to the "amount" of data augmentation you use. 
 Training loss looks somthing like: 
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/l1.png" width="400">
 
 ## Data Augmentation
 
-Heavy data augmentation is used to improve generalization / performance.  
+Heavy data augmentation is used to improve generalization/ performance.  
 Check flownet.py for 
 
 - chromatic augmentation 
 - geometric augmentation (rotation + translation)
 
-Please note that when we flip, crop, rotate and scale, we must be carefull and change 
-the flow directions (u,v) according to the change of pixels (x, y). 
+Please note that when we flip, crop, rotate and scale, we must be careful and change the flow directions (u,v) according to the change of pixels (x, y). 
 
 ## Loss
 
-L1 loss is calculated multiple times while decoding, we must "downsample" the original flow which is done 
-through a weighted average in the original caffe version. Here, simple bilinear interpolation is used which could have negative effects on performance. 
+L1 loss is calculated multiple times while decoding, we must "downsample" the original flow which is done through a weighted average in the original caffe version. Here, simple bilinear interpolation is used which could have negative effects on performance. 
 
 ## Evaluation 
 
@@ -61,11 +59,7 @@ by loading one test example and creating a minibatch (of size = FLAGS.batchsize)
 and average results of the minibatch, parameters: 
 
     --dropout True / --is_training True
-
-Note that is_training is falsly named due to simplicity.
-Through variances of the minibatches results on the same image but inference on "different" models, 
-confidence images can be created. Evaluation throughout training on FlyingCharis test set (pink) ad well as 
-Sintel Clean (orange), Sintel Final (gray) and Kitti (blue) training sets .
+Note that is_training is falsely named due to simplicity. Through variances of the minibatches results on the same image but inference on "different" models, confidence images can be created. Evaluation throughout training on FlyingCharis test set (pink) ad well as Sintel Clean (orange), Sintel Final (gray) and Kitti (blue) training sets.
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/chairs_epe.png" width="300"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/Kitti_Sintel_EPE.png" width="300">
 ## Evaluation 
