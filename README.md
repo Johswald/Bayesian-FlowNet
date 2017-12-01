@@ -64,7 +64,6 @@ Note that is_training is falsely named due to simplicity. Through variances of t
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/chairs_epe.png" width="300"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/Kitti_Sintel_EPE.png" width="300">
 ## Evaluation 
 Two training images as well as groundtruth, flow estimation, confidence and error images:
-First image of pair:
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0384.png" width="400">
 Groundtruth images:
