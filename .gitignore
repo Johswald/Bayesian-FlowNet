@@ -1,1 +1,5 @@
 data/
+log_flownets_final/
+no_dropout/
+dropout/
+dropout_h/
