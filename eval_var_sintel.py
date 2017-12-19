@@ -64,6 +64,7 @@ flags.DEFINE_boolean('batch_normalization', False, 'Batch on/off')
 flags.DEFINE_boolean('weights_reg', None,
                      'Weights regularizer')
 
+# turn to False when you want to do (dropout+) weight scaling
 flags.DEFINE_boolean('is_training', False, 'Batch on/off')
 # TESTING
 
@@ -100,7 +101,12 @@ flags.DEFINE_integer('flow_int', 1,
                      'Variable for img saving.')
 
 def aee_f(gt, calc_flows):
-    "average end point error"
+    """Average endpoint error between prediction and groundtruth
+
+	Keyword arguments:
+	gt -- groundtruth flow
+	calc_flows -- predicted flow
+    """
     square = tf.square(gt - calc_flows)
     square = tf.squeeze(square)
     x , y = tf.split(square, num_or_size_splits=2, axis=2)
@@ -109,10 +115,16 @@ def aee_f(gt, calc_flows):
     return aee
 
 def var_mean(flow_to_mean):
-    """ Pyfunc wrapper for the confidence / mean calculation"""
+    """ Confidence and mean calculation of given (different) flow predictions
+    on same image pair. Due to leaving dropout one while inference, we can
+    average predictions of the by dropout changed neural network
+
+	Keyword arguments:
+	flow_to_mean -- (different) flow predictions
+    """
 
     def _var_mean(flow_to_mean):
-        """ confidence / mean calculation"""
+        """ Tensorflow Pyfunc for confidence / mean calculation"""
         flow_to_mean = np.array(flow_to_mean)
         x = flow_to_mean[:,:,:,0]
         y = flow_to_mean[:,:,:,1]

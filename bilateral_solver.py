@@ -39,6 +39,7 @@ def get_valid_idx(valid, candidates):
     return valid_idx, locs
 
 class BilateralGrid(object):
+
     def __init__(self, im, sigma_spatial=12, sigma_luma=4, sigma_chroma=4):
         im_yuv = rgb2yuv(im)
         # Compute 5-dimensional XYLUV bilateral-space coordinates
