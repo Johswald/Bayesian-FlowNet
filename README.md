@@ -71,6 +71,7 @@ Groundtruth images:
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0384.png" width="400">
 
 Predicted flow images:
+
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/n_flow_214_better.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/n_flow_384_better.png" width="400">
 
 Confidence images:
