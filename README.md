@@ -63,10 +63,11 @@ Note that is_training is falsely named due to simplicity. Through variances of t
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/chairs_epe.png" width="300"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/Kitti_Sintel_EPE.png" width="300">
 ## Evaluation 
-Training images as well as groundtruth, flow estimation, confidence and error images,
-two examples of the FlyingChairs dataset, only first image of pair shown.
+Training images as well as groundtruth, flow estimation, confidence and error images.
+Two examples of the FlyingChairs dataset:
 
-<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/img_0384.png" width="400">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/04058_img1.jpg" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/06866_img1.jpg" width="400">
+<img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/04058_img2.jpg" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/06866_img2.jpg" width="400">
 Groundtruth images:
 
 <img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0214.png" width="400"><img src="https://github.com/Johswald/Bayesian-FlowNet/blob/master/images/gt_0384.png" width="400">
