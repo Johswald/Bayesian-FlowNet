@@ -159,43 +159,26 @@ def fast_chromatic_augm(imgs_0, imgs_1):
 
 
 def warp_image(img, flow):
-    """ Use optical flow to warp image to the next
+    """ Use optical flow to backwarp image to the previous
 	(https://github.com/liruoteng/OpticalFlowToolkit/blob/master/lib/flowlib.py)
 
 	Keyword arguments:
 	img -- image to warp
 	flow -- optical flow
     """
-    img = (img*255.0).astype(np.uint8)
-    from scipy import interpolate
+
     image_height = img.shape[0]
     image_width = img.shape[1]
-    flow_height = flow.shape[0]
-    flow_width = flow.shape[1]
-    n = image_height * image_width
-    (iy, ix) = np.mgrid[0:image_height, 0:image_width]
-    (fy, fx) = np.mgrid[0:flow_height, 0:flow_width]
-    fx = fx.astype(np.float64)
-    fy = fy.astype(np.float64)
-    fx += flow[:, :, 0]
-    fy += flow[:, :, 1]
-    mask = np.logical_or(fx < 0, fx > flow_width)
-    mask = np.logical_or(mask, fy < 0)
-    mask = np.logical_or(mask, fy > flow_height)
-    fx = np.minimum(np.maximum(fx, 0), flow_width)
-    fy = np.minimum(np.maximum(fy, 0), flow_height)
-    points = np.concatenate((ix.reshape(n, 1), iy.reshape(n, 1)), axis=1)
-    xi = np.concatenate((fx.reshape(n, 1), fy.reshape(n, 1)), axis=1)
-    warp = np.zeros((image_height, image_width, img.shape[2]))
-    for i in range(img.shape[2]):
-        channel = img[:, :, i]
-        values = channel.reshape(n, 1)
-        new_channel = interpolate.griddata(points, values, xi, method='cubic')
-        new_channel = np.reshape(new_channel, [flow_height, flow_width])
-        new_channel[mask] = 1
-        warp[:, :, i] = new_channel.astype(np.uint8)
+    warp = np.zeros(img.shape)
 
-    return warp.astype(np.uint8)
+    for x in range(image_width):
+        for y in range(image_height):
+            fx = round(flow[x, y, 0] + x)
+            fy = round(flow[x, y, 1] + y)
+            if fx >= 0 and fy >= 0 and fx < image_width and fy < image_height:
+                print(x, y, int(fx), int(fy))
+               warp[x, y] = img[int(fx), int(fy)]
+    return warp
 
 
 def warp(imgs_0, imgs_1, flows, name):
@@ -209,16 +192,15 @@ def warp(imgs_0, imgs_1, flows, name):
 	name -- naming for summary
     """
 
-    def _warp(imgs_0, flows):
-        """Tensorflow Pyfunc to warp image to the next"""
-        _, h, w, _ = imgs_0.shape
-        for img0, flow, i in zip(imgs_0, flows, range(FLAGS.batchsize)):
-            warped = warp_image(img0, flow)
-            imgs_0[i] = warped.astype(np.float32) / 255.0
-        return imgs_0
+    def _warp(imgs_1, flows):
+        """Tensorflow Pyfunc to backwarp image to the previous"""
+        _, h, w, _ = imgs_1.shape
+        for img, flow, i in zip(imgs_1, flows, range(FLAGS.batchsize)):
+            imgs_1[i] = warp_image(img, flow)
+        return imgs_1
 
     bs = FLAGS.batchsize
-    warped_imgs = tf.py_func(_warp, [imgs_0, flows],
+    warped_imgs = tf.py_func(_warp, [imgs_1, flows],
                              tf.float32, name='warp')
     warped_imgs = tf.stack(warped_imgs)
     warped_imgs.set_shape([bs] + list(FLAGS.img_shape))
@@ -244,6 +226,7 @@ def rotation_crop_trans(rotI_0, rotI_1, rotF):
     rotF -- ground truth optical flows between imgs_0, imgs_1
     """
 
+    warp(rotI_0, rotI_1, rotF, "_rotF_first")
     def _flip(rotI_0, rotI_1, rotF):
         """Tensorflow Pyfunc to flip randomly flip images/ flows"""
         for img0, img1, flow, i in zip(rotI_0, rotI_1, rotF, range(bs)):
@@ -402,7 +385,7 @@ def rotation_crop_trans(rotI_0, rotI_1, rotF):
 	"""
 
     # Check data augmentation
-    warp(rotI_0, rotI_1, rotF, "_rotF")
+    warp(rotI_0, rotI_1, rotF, "_rotF_sec")
     return rotI_0, rotI_1, rotF
 
 

@@ -98,13 +98,13 @@ def apply_augmentation(imgs_0, imgs_1, flows):
         with tf.name_scope('Augmentation'):
 
             # chromatic tranformation of images
-            imgs_0, imgs_1 = flownet.fast_chromatic_augm(imgs_0, imgs_1)
+            #imgs_0, imgs_1 = flownet.fast_chromatic_augm(imgs_0, imgs_1)
 
             # rotation / scaling / cropping (very important for flow)
             imgs_0, imgs_1, flows = flownet.rotation_crop_trans(
                 imgs_0, imgs_1, flows)
             # summary
-            flownet.image_summary(imgs_0, imgs_1, "B_after_augm", flows)
+            #flownet.image_summary(imgs_0, imgs_1, "B_after_augm", flows)
 
     return imgs_0, imgs_1, flows
 
@@ -117,7 +117,7 @@ def main(_):
         imgs_0, imgs_1, flows = flownet_tools.get_data(FLAGS.datadir, True)
 
         # img summary after loading
-        flownet.image_summary(imgs_0, imgs_1, "A_input", flows)
+        #flownet.image_summary(imgs_0, imgs_1, "A_input", flows)
 
         # apply augmentation
         imgs_0, imgs_1, flows = apply_augmentation(imgs_0, imgs_1, flows)
